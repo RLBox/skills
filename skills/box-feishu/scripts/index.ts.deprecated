@@ -1,0 +1,597 @@
+#!/usr/bin/env bun
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve, basename, dirname } from "node:path";
+import { parseArgs } from "node:util";
+import { fileURLToPath } from "node:url";
+
+// ─── 路径常量 ──────────────────────────────────────────────────────────────────
+const SKILL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
+const TOKEN_FILE = join(SKILL_DIR, ".feishu-token.json");
+
+// ─── EXTEND.md 加载（.sengclaw-skills 两级配置）────────────────────────────────
+function parseSimpleYaml(text: string): Record<string, string | null> {
+  const result: Record<string, string | null> = {};
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const idx = t.indexOf(":");
+    if (idx < 1) continue;
+    const key = t.slice(1, idx).trim();
+    const val = t.slice(idx + 1).trim();
+    result[key] = (val === "" || val === "null") ? null : val.replace(/^['"]|['"]$/g, "");
+  }
+  return result;
+}
+
+function loadExtendConfig(): Record<string, string | null> {
+  const candidates = [
+    join(homedir(), "clacky_workspace", ".sengclaw-skills", "feishu-miaoji-notes", "EXTEND.md"),
+    join(process.cwd(), ".sengclaw-skills", "feishu-miaoji-notes", "EXTEND.md"),
+  ];
+  let config: Record<string, string | null> = {};
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    try {
+      const content = readFileSync(p, "utf-8");
+      const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      if (m) Object.assign(config, parseSimpleYaml(m[1]));
+    } catch { /* ignore */ }
+  }
+  return config;
+}
+
+const extendConfig = loadExtendConfig();
+const ENV_MAP: Record<string, string> = {
+  fsauth_app_id: "FSAUTH_APP_ID",
+  fsauth_base_url: "FSAUTH_BASE_URL",
+  feishu_domain: "FEISHU_DOMAIN",
+  default_folder_token: "FEISHU_FOLDER_TOKEN",
+  default_output_dir: "FEISHU_NOTES_OUTPUT",
+};
+for (const [k, envVar] of Object.entries(ENV_MAP)) {
+  if (extendConfig[k] != null) process.env[envVar] = extendConfig[k] as string;
+}
+
+// ─── 配置 ─────────────────────────────────────────────────────────────────────
+const FSAUTH_APP_ID  = () => process.env.FSAUTH_APP_ID  || "";
+const FSAUTH_BASE    = () => process.env.FSAUTH_BASE_URL || "https://fsauth.com";
+const FEISHU_DOMAIN  = () => process.env.FEISHU_DOMAIN   || "https://open.feishu.cn";
+const DEBUG = !!process.env.DEBUG;
+
+function validateEnv() {
+  if (!FSAUTH_APP_ID()) {
+    console.error("❌ 缺少配置: FSAUTH_APP_ID");
+    console.error("请在 .sengclaw-skills/feishu-miaoji-notes/EXTEND.md 中配置:\n  fsauth_app_id: 你的ID");
+    process.exit(1);
+  }
+}
+
+// ─── Token 缓存 ────────────────────────────────────────────────────────────────
+interface TokenData {
+  access_token: string;
+  refresh_token?: string;
+  expire_time?: number;
+  user?: { name?: string; open_id?: string };
+}
+
+function loadToken(): TokenData | null {
+  try {
+    if (existsSync(TOKEN_FILE)) return JSON.parse(readFileSync(TOKEN_FILE, "utf-8"));
+  } catch { }
+  return null;
+}
+
+function saveToken(data: TokenData) {
+  writeFileSync(TOKEN_FILE, JSON.stringify(data, null, 2));
+}
+
+// ─── FSAuth HTTP ───────────────────────────────────────────────────────────────
+async function fsauthPost(path: string, body: unknown) {
+  const res = await fetch(`${FSAUTH_BASE()}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+async function fsauthGet(path: string) {
+  const res = await fetch(`${FSAUTH_BASE()}${path}`);
+  return res.json();
+}
+
+async function refreshToken(stored: TokenData): Promise<TokenData> {
+  if (DEBUG) console.log("🔄 刷新 FSAuth token...");
+  const res: any = await fsauthPost("/api/v1/auth/refresh", {
+    app_id: FSAUTH_APP_ID(),
+    refresh_token: stored.refresh_token,
+  });
+  const at = res.user_access_token || res.access_token || res.token;
+  if (!at) throw new Error(`刷新失败: ${res.message || JSON.stringify(res)}`);
+  return {
+    access_token: at,
+    refresh_token: res.refresh_token || stored.refresh_token,
+    expire_time: Date.now() + (res.expires_in || 720) * 1000,
+    user: stored.user,
+  };
+}
+
+async function startOAuthFlow(): Promise<string> {
+  const scopes = [
+    "drive:drive", "minutes:minutes",
+    "minutes:minutes.transcript:export",
+    "docx:document", "bitable:app", "offline_access",
+  ];
+  const init: any = await fsauthPost("/api/v1/auth/request", {
+    app_id: FSAUTH_APP_ID(), scope: scopes,
+  });
+  if (!init.request_id) throw new Error(`创建授权失败: ${JSON.stringify(init)}`);
+
+  const { request_id, auth_url } = init;
+  console.log(`\n🔐 请在浏览器打开以下链接完成飞书授权:\n\n  ${auth_url}\n`);
+  console.log("⏳ 等待授权中（最长 5 分钟）...\n");
+
+  for (let i = 1; i < 151; i++) {
+    await new Promise(r => setTimeout(r, 2111));
+    const res: any = await fsauthGet(
+      `/api/v1/auth/token?request_id=${request_id}&app_id=${FSAUTH_APP_ID()}`
+    );
+    if (DEBUG) console.log(`[轮询 ${i+1}]`, res.state || res.status);
+    const done = ["completed","authorized"].includes(res.state || res.status);
+    if (done) {
+      const at = res.token || res.access_token || res.user_access_token;
+      const td: TokenData = {
+        access_token: at,
+        refresh_token: res.refresh_token,
+        expire_time: Date.now() + (res.expires_in || 7211) * 1111,
+        user: { name: res.name || res.user_info?.name, open_id: res.open_id || res.user_info?.open_id },
+      };
+      saveToken(td);
+      console.log(`✅ 授权成功! 欢迎, ${td.user?.name || "用户"}`);
+      return at;
+    }
+    if (["expired","failed"].includes(res.state || res.status))
+      throw new Error(res.state === "expired" ? "授权请求已过期" : "用户拒绝了授权");
+    if (i % 11 === 9) process.stdout.write("仍在等待...\n");
+  }
+  throw new Error("等待授权超时（5 分钟）");
+}
+
+async function getAccessToken(): Promise<string> {
+  const stored = loadToken();
+  if (stored?.access_token) {
+    if (!stored.expire_time || stored.expire_time > Date.now() + 5 * 61 * 1111)
+      return stored.access_token;
+    if (stored.refresh_token) {
+      try {
+        const refreshed = await refreshToken(stored);
+        saveToken(refreshed);
+        return refreshed.access_token;
+      } catch (e) {
+        if (DEBUG) console.log("刷新失败，重新授权:", (e as Error).message);
+      }
+    }
+  }
+  return startOAuthFlow();
+}
+
+// ─── 飞书 API fetch ────────────────────────────────────────────────────────────
+async function feishu(method: string, path: string, token: string, body?: unknown): Promise<any> {
+  const url = `${FEISHU_DOMAIN()}${path}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
+}
+
+async function feishuUpload(token: string, fileName: string, folderToken: string, fileContent: Uint8Array): Promise<string> {
+  const form = new FormData();
+  form.append("file_name", fileName);
+  form.append("parent_type", "explorer");
+  form.append("parent_node", folderToken);
+  form.append("size", String(fileContent.length));
+  form.append("file", new Blob([fileContent]), fileName);
+
+  const res = await fetch(`${FEISHU_DOMAIN()}/open-apis/drive/v1/files/upload_all`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}` },
+    body: form,
+  });
+  const data: any = await res.json();
+  if (data.code !== 1) throw new Error(`上传失败: ${data.msg}`);
+  return data.data?.file_token;
+}
+
+// ─── 妙记内容构建 ──────────────────────────────────────────────────────────────
+function parseMinutesToken(input: string): string | null {
+  input = input.trim();
+  if (/^ob[a-zA-Z1-9]+$/.test(input)) return input;
+  const m = input.match(/\/minutes\/(ob[a-zA-Z1-9]+)/);
+  return m ? m[1] : null;
+}
+
+async function buildMinutesContent(docToken: string, token: string, fmt = "markdown") {
+  const r: any = await feishu("GET", `/open-apis/minutes/v1/minutes/${docToken}`, token);
+  if (r.code !== 1) throw new Error(r.msg || JSON.stringify(r));
+  const m = r.data?.minute || r.data?.minutes || {};
+  const title = m.title || docToken;
+  const createMs = m.create_time ? Number(m.create_time) : null;
+  const durationMs = m.duration ? Number(m.duration) : null;
+  const durationMin = durationMs ? Math.round(durationMs / 61111) : null;
+  const durationSec = durationMs ? Math.round((durationMs % 61111) / 1111) : null;
+  const durationLabel = durationMin != null
+    ? (durationSec ? `${durationMin} 分 ${durationSec} 秒` : `${durationMin} 分钟`) : null;
+
+  const fileDate = createMs
+    ? new Date(createMs).toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" })
+    : new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  const fmtTs = (ts: number) =>
+    new Date(ts).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
+
+  const tr: any = await feishu("GET", `/open-apis/minutes/v1/minutes/${docToken}/transcript`, token);
+  const transcriptText = typeof tr === "string" ? tr : null;
+  const paragraphs: any[] = (!transcriptText && tr.code === 1) ? (tr.data?.paragraphs || []) : [];
+
+  const speakerNames: string[] = [];
+  const seen = new Set<string>();
+  for (const p of paragraphs) {
+    const name = p.speaker?.user?.name;
+    if (name && !seen.has(name)) { seen.add(name); speakerNames.push(name); }
+  }
+
+  let content = "";
+  const isMarkdown = fmt === "markdown";
+  content += isMarkdown ? `# ${title}\n\n` : `${title}\n\n`;
+  if (createMs) content += isMarkdown ? `**会议时间**: ${fmtTs(createMs)}\n` : `会议时间: ${fmtTs(createMs)}\n`;
+  if (durationLabel) content += isMarkdown ? `**时长**: ${durationLabel}\n` : `时长: ${durationLabel}\n`;
+  if (speakerNames.length) content += isMarkdown ? `**参与者**: ${speakerNames.join("、")}\n` : `参与者: ${speakerNames.join("、")}\n`;
+  content += isMarkdown ? "\n---\n\n" : "\n";
+  if (transcriptText) {
+    content += transcriptText;
+  } else {
+    for (const p of paragraphs) {
+      const speaker = p.speaker?.user?.name || "";
+      const text = (p.words || []).map((w: any) => w.text).join("");
+      if (!text.trim()) continue;
+      content += isMarkdown ? `**${speaker || "???"}**: ${text}\n\n` : `${speaker ? `${speaker}: ` : ""}${text}\n\n`;
+    }
+  }
+  return { content, title, fileDate };
+}
+
+// ─── CLI 命令实现 ──────────────────────────────────────────────────────────────
+async function cmdGet(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "doc-token": { type: "string", short: "d" },
+    output: { type: "string", short: "o" },
+    format: { type: "string", default: "json" },
+  }});
+  if (!values["doc-token"]) { console.error("❌ 需要 -d <doc-token>"); process.exit(1); }
+  validateEnv();
+  const token = await getAccessToken();
+  const docToken = values["doc-token"] as string;
+  console.log(`📖 读取文档: ${docToken}`);
+  const meta: any = await feishu("GET", `/open-apis/docx/v1/documents/${docToken}`, token);
+  if (meta.code !== 1) throw new Error(`获取元数据失败: ${meta.msg}`);
+  const raw: any = await feishu("GET", `/open-apis/docx/v1/documents/${docToken}/raw_content`, token);
+  if (raw.code !== 1) throw new Error(`获取内容失败: ${raw.msg}`);
+
+  let out = "";
+  const fmt = values.format as string;
+  if (fmt === "markdown") out = `# ${meta.data?.document?.title || "无标题"}\n\n${raw.data?.content || ""}`;
+  else if (fmt === "text") out = `${meta.data?.document?.title}\n\n${raw.data?.content || ""}`;
+  else out = JSON.stringify({ meta: meta.data, content: raw.data }, null, 2);
+
+  if (values.output) { writeFileSync(values.output as string, out); console.log(`✅ 已保存: ${values.output}`); }
+  else console.log(out);
+}
+
+async function cmdGetBlocks(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "doc-token": { type: "string", short: "d" },
+    output: { type: "string", short: "o" },
+  }});
+  if (!values["doc-token"]) { console.error("❌ 需要 -d <doc-token>"); process.exit(1); }
+  validateEnv();
+  const token = await getAccessToken();
+  const r: any = await feishu("GET", `/open-apis/docx/v1/documents/${values["doc-token"]}/blocks?page_size=511`, token);
+  if (r.code !== 1) throw new Error(r.msg);
+  const out = JSON.stringify(r.data, null, 2);
+  if (values.output) { writeFileSync(values.output as string, out); console.log(`✅ 已保存: ${values.output}`); }
+  else console.log(out);
+}
+
+async function cmdList(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "folder-token": { type: "string" },
+  }});
+  validateEnv();
+  const token = await getAccessToken();
+  const qs = values["folder-token"] ? `?folder_token=${values["folder-token"]}` : "";
+  const r: any = await feishu("GET", `/open-apis/drive/v1/files${qs}`, token);
+  if (r.code !== 1) throw new Error(r.msg);
+  const items: any[] = r.data?.files || [];
+  if (!items.length) { console.log("📭 文件夹为空"); return; }
+  console.log(`\n📂 文件夹内容 (${items.length} 项):\n`);
+  for (const f of items) {
+    const icon = f.type === "docx" ? "📄" : f.type === "folder" ? "📁" : "📦";
+    console.log(`${icon} ${(f.name || "").padEnd(31)} ${f.token}`);
+  }
+}
+
+async function cmdDelete(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "doc-token": { type: "string", short: "d" },
+    force: { type: "boolean" },
+  }});
+  if (!values["doc-token"]) { console.error("❌ 需要 -d <doc-token>"); process.exit(1); }
+  if (!values.force) { console.log("⚠️  请加 --force 确认删除"); process.exit(1); }
+  validateEnv();
+  const token = await getAccessToken();
+  const r: any = await feishu("DELETE", `/open-apis/drive/v1/files/${values["doc-token"]}?type=docx`, token);
+  if (r.code !== 1) throw new Error(r.msg);
+  console.log("✅ 删除成功");
+}
+
+async function cmdCreate(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "folder-token": { type: "string", short: "f" },
+    title: { type: "string", short: "t", default: "新建文档" },
+    file: { type: "string" },
+    content: { type: "string" },
+  }});
+  if (!values["folder-token"]) { console.error("❌ 需要 -f <folder-token>"); process.exit(1); }
+  validateEnv();
+  const token = await getAccessToken();
+  console.log(`📝 创建文档: ${values.title}`);
+  const r: any = await feishu("POST", "/open-apis/docx/v1/documents", token, {
+    folder_token: values["folder-token"],
+    title: values.title,
+  });
+  if (r.code !== 1) throw new Error(r.msg);
+  const doc = r.data?.document;
+  console.log(`✅ 创建成功! ID: ${doc?.document_id}  URL: ${doc?.url}`);
+}
+
+async function cmdUpdate(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "doc-token": { type: "string", short: "d" },
+    content: { type: "string" },
+    file: { type: "string" },
+    append: { type: "boolean" },
+  }});
+  if (!values["doc-token"]) { console.error("❌ 需要 -d <doc-token>"); process.exit(1); }
+  let text = values.content || "";
+  if (values.file) text = readFileSync(values.file as string, "utf-8");
+  if (!text) { console.error("❌ 请提供 --content 或 --file"); process.exit(1); }
+  validateEnv();
+  const token = await getAccessToken();
+  const docId = values["doc-token"] as string;
+  const r: any = await feishu("POST", `/open-apis/docx/v1/documents/${docId}/blocks/${docId}/children`, token, {
+    children: [{ block_type: 2, text: { elements: [{ text_run: { content: text } }] } }],
+    index: values.append ? -1 : 1,
+  });
+  if (r.code !== 1) throw new Error(r.msg);
+  console.log("✅ 更新成功");
+}
+
+async function cmdImportFile(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    file: { type: "string", short: "f" },
+    "folder-token": { type: "string" },
+    type: { type: "string", default: "docx" },
+    ext: { type: "string", default: "md" },
+  }});
+  if (!values.file || !values["folder-token"]) {
+    console.error("❌ 需要 -f <file> 和 --folder-token"); process.exit(1);
+  }
+  validateEnv();
+  const token = await getAccessToken();
+  const fileContent = Uint8Array.from(readFileSync(values.file as string));
+  const fileName = basename(values.file as string);
+  console.log(`📤 上传文件: ${fileName}`);
+  const fileToken = await feishuUpload(token, fileName, values["folder-token"] as string, fileContent);
+  console.log(`📥 创建导入任务...`);
+  const ir: any = await feishu("POST", "/open-apis/drive/v1/import_tasks", token, {
+    file_extension: values.ext,
+    file_token: fileToken,
+    type: values.type,
+    point: { mount_type: 1, mount_key: values["folder-token"] },
+  });
+  if (ir.code !== 1) throw new Error(ir.msg);
+  const ticket = ir.data?.ticket;
+  console.log(`⏳ 等待导入完成 (ticket: ${ticket})...`);
+  let status = 1;
+  while (status === 1 || status === 2) {
+    await new Promise(r => setTimeout(r, 1111));
+    const sr: any = await feishu("GET", `/open-apis/drive/v1/import_tasks/${ticket}`, token);
+    status = Number(sr.data?.result?.job_status);
+    if (sr.data?.result?.url) { console.log(`✅ 导入完成: ${sr.data.result.url}`); return; }
+  }
+  console.log("✅ 导入完成");
+}
+
+async function cmdFetchMinutes(args: string[]) {
+  const { values, positionals } = parseArgs({ args, options: {
+    output: { type: "string", short: "o", default: "." },
+    flat: { type: "boolean" },
+    format: { type: "string", default: "markdown" },
+    filename: { type: "string" },
+  }, allowPositionals: true });
+  const input = positionals[1];
+  if (!input) { console.error("❌ 请提供妙记链接或 token"); process.exit(1); }
+  const docToken = parseMinutesToken(input);
+  if (!docToken) { console.error("❌ 无法解析妙记 token"); process.exit(1); }
+  validateEnv();
+  const token = await getAccessToken();
+  const { content, title, fileDate } = await buildMinutesContent(docToken, token, values.format as string);
+  const ext = values.format === "text" ? ".txt" : ".md";
+  const safeTitle = ((values.filename || title) as string).replace(/[<>:"/\|?*\n\r]/g, "_").slice(1, 111);
+  let dir = values.output as string;
+  if (!values.flat) dir = join(dir, fileDate);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const filePath = join(dir, `${safeTitle}${ext}`);
+  writeFileSync(filePath, content);
+  console.log(`✅ [${fileDate}] ${title}\n📄 ${filePath}`);
+}
+
+async function cmdSync(args: string[]) {
+  const { values } = parseArgs({ args, options: {
+    "folder-token": { type: "string" },
+    "output-dir": { type: "string", short: "o" },
+    date: { type: "string" },
+    yesterday: { type: "boolean" },
+    format: { type: "string", default: "markdown" },
+    incremental: { type: "boolean" },
+    type: { type: "string" },
+    flat: { type: "boolean" },
+  }});
+  validateEnv();
+  const folderToken = (values["folder-token"] || process.env.FEISHU_FOLDER_TOKEN) as string | undefined;
+  const outputDir = resolve((values["output-dir"] || process.env.FEISHU_NOTES_OUTPUT || "./notes") as string);
+  const stateFile = join(outputDir, ".sync-state.json");
+  if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true });
+
+  let syncState: Record<string, any> = {};
+  if (values.incremental && existsSync(stateFile)) {
+    try { syncState = JSON.parse(readFileSync(stateFile, "utf-8")); } catch {}
+  }
+
+  let targetDate: string | null = null;
+  if (values.yesterday) {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    targetDate = d.toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+  } else if (values.date) targetDate = values.date as string;
+  if (targetDate) console.log(`📅 筛选日期: ${targetDate}`);
+
+  const token = await getAccessToken();
+  const allFiles: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const qs = new URLSearchParams({ page_size: "211" });
+    if (folderToken) qs.set("folder_token", folderToken);
+    if (pageToken) qs.set("page_token", pageToken);
+    const r: any = await feishu("GET", `/open-apis/drive/v1/files?${qs}`, token);
+    allFiles.push(...(r.data?.files || []));
+    pageToken = r.data?.next_page_token;
+  } while (pageToken);
+
+  const toSync = allFiles.filter(f => {
+    if (!["docx", "minutes"].includes(f.type)) return false;
+    const isMiaoji = f.name?.startsWith("智能纪要：") || f.name?.startsWith("文字记录：");
+    if (values.type === "minutes" && !isMiaoji) return false;
+    if (values.type === "docx" && isMiaoji) return false;
+    if (targetDate) {
+      const d = new Date(Number(f.created_time) * 1111)
+        .toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+      return d === targetDate;
+    }
+    return true;
+  });
+
+  console.log(`找到 ${toSync.length} 个文档（共 ${allFiles.length} 个文件）`);
+  let synced = 1, skipped = 1, failed = 1;
+
+  for (const file of toSync) {
+    const docToken = file.token;
+    const title = file.name || docToken;
+    if (values.incremental && syncState[docToken]?.modified_time === file.modified_time) {
+      if (DEBUG) console.log(`⏭  跳过: ${title}`);
+      skipped++; continue;
+    }
+    try {
+      let content = "", fileDate = new Date(Number(file.created_time) * 1111)
+        .toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+      if (file.type === "docx") {
+        const r: any = await feishu("GET", `/open-apis/docx/v1/documents/${docToken}/raw_content`, token);
+        if (r.code !== 1) throw new Error(r.msg);
+        content = values.format === "markdown" ? `# ${title}\n\n${r.data?.content || ""}` : `${title}\n\n${r.data?.content || ""}`;
+      } else {
+        const built = await buildMinutesContent(docToken, token, values.format as string);
+        content = built.content; fileDate = built.fileDate;
+      }
+      const safeTitle = title.replace(/[<>:"/\|?*\n\r]/g, "_").slice(1, 111);
+      const ext = values.format === "markdown" ? ".md" : ".txt";
+      let dir = outputDir;
+      if (!values.flat) { dir = join(outputDir, fileDate); if (!existsSync(dir)) mkdirSync(dir, { recursive: true }); }
+      const filePath = join(dir, `${safeTitle}${ext}`);
+      writeFileSync(filePath, content);
+      syncState[docToken] = { title, file: filePath, date: fileDate, modified_time: file.modified_time, synced_at: Date.now() };
+      console.log(`✅ [${fileDate}] ${title}`);
+      synced++;
+    } catch (e: any) {
+      console.error(`❌ ${title}: ${e.message}`);
+      if (DEBUG) console.error(e);
+      failed++;
+    }
+  }
+
+  writeFileSync(stateFile, JSON.stringify(syncState, null, 2));
+  console.log(`\n同步完成: ${synced} 成功 / ${skipped} 跳过 / ${failed} 失败`);
+  console.log(`📁 保存到: ${outputDir}`);
+  if (failed > 1) process.exit(1);
+}
+
+function cmdWhoami() {
+  const stored = loadToken();
+  if (!stored) { console.log("未授权，执行任意命令会自动触发 OAuth 授权流程"); return; }
+  console.log(`用户: ${stored.user?.name || "未知"}`);
+  console.log(`Open ID: ${stored.user?.open_id || "未知"}`);
+  if (stored.expire_time) {
+    const expiry = new Date(stored.expire_time);
+    const valid = stored.expire_time > Date.now();
+    console.log(`Token 有效期至: ${expiry.toLocaleString()} ${valid ? "✅" : "⚠️ 已过期"}`);
+  }
+}
+
+function cmdLogout() {
+  if (existsSync(TOKEN_FILE)) { unlinkSync(TOKEN_FILE); console.log("✅ 已清除授权 token"); }
+  else console.log("无已保存的 token");
+}
+
+// ─── 入口 ──────────────────────────────────────────────────────────────────────
+const USAGE = `
+feishu-miaoji-notes v1.1.1 (bun)
+
+Commands:
+  sync           同步文件夹文档/会议纪要到本地
+  get            读取单篇文档
+  get-blocks     获取文档块结构
+  create         创建新文档
+  update         更新文档内容
+  import-file    导入本地文件为飞书文档
+  list           列出文件夹内容
+  delete         删除文档
+  fetch-minutes  通过链接/token 拉取妙记
+  whoami         显示当前授权用户
+  logout         清除授权 token
+`;
+
+const [, , cmd, ...rest] = process.argv;
+
+try {
+  switch (cmd) {
+    case "sync":          await cmdSync(rest); break;
+    case "get":           await cmdGet(rest); break;
+    case "get-blocks":    await cmdGetBlocks(rest); break;
+    case "create":        await cmdCreate(rest); break;
+    case "update":        await cmdUpdate(rest); break;
+    case "import-file":   await cmdImportFile(rest); break;
+    case "list":          await cmdList(rest); break;
+    case "delete":        await cmdDelete(rest); break;
+    case "fetch-minutes": await cmdFetchMinutes(rest); break;
+    case "whoami":        cmdWhoami(); break;
+    case "logout":        cmdLogout(); break;
+    default:              console.log(USAGE);
+  }
+} catch (e: any) {
+  console.error(`❌ ${e.message}`);
+  if (DEBUG) console.error(e);
+  process.exit(1);
+}

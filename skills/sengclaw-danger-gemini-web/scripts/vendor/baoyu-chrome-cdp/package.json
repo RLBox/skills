@@ -1,0 +1,9 @@
+{
+  "name": "baoyu-chrome-cdp",
+  "private": true,
+  "version": "sengclaw-markdown-to-html.1.sengclaw-markdown-to-html",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
