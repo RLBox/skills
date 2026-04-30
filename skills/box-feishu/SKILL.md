@@ -1,5 +1,5 @@
 ---
-name: sengclaw-feishu
+name: box-feishu
 version: 2.1.0
 description: >
   飞书全能助手：基于 lark-cli 统一操作飞书所有服务。
@@ -10,7 +10,7 @@ metadata:
     bins: ["lark-cli"]
 ---
 
-# sengclaw-feishu v2 — 飞书全能助手
+# box-feishu v2 — 飞书全能助手
 
 基于官方 `lark-cli` 工具，统一操作飞书所有服务。
 
