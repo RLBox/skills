@@ -1,5 +1,5 @@
 ---
-name: finishing-a-development-branch
+name: box-finishing-a-development-branch
 description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
 ---
 
@@ -193,8 +193,8 @@ git worktree remove <worktree-path>
 ## Integration
 
 **Called by:**
-- **subagent-driven-development** (Step 7) - After all tasks complete
-- **executing-plans** (Step 5) - After all batches complete
+- **box-subagent-driven-development** (Step 7) - After all tasks complete
+- **box-executing-plans** (Step 5) - After all batches complete
 
 **Pairs with:**
-- **using-git-worktrees** - Cleans up worktree created by that skill
+- **box-using-git-worktrees** - Cleans up worktree created by that skill

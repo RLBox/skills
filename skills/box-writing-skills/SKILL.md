@@ -1,5 +1,5 @@
 ---
-name: writing-skills
+name: box-writing-skills
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment
 ---
 
@@ -282,8 +282,8 @@ wc -w skills/path/SKILL.md
 Use skill name only, with explicit requirement markers:
 - ✅ Good: `**REQUIRED SUB-SKILL:** Use box:test-driven-development`
 - ✅ Good: `**REQUIRED BACKGROUND:** You MUST understand box:systematic-debugging`
-- ❌ Bad: `See skills/testing/test-driven-development` (unclear if required)
-- ❌ Bad: `@skills/testing/test-driven-development/SKILL.md` (force-loads, burns context)
+- ❌ Bad: `See skills/testing/box-test-driven-development` (unclear if required)
+- ❌ Bad: `@skills/testing/box-test-driven-development/SKILL.md` (force-loads, burns context)
 
 **Why no @ links:** `@` syntax force-loads files immediately, consuming 200k+ context before you need them.
 
@@ -398,7 +398,7 @@ Different skill types need different test approaches:
 
 ### Discipline-Enforcing Skills (rules/requirements)
 
-**Examples:** TDD, verification-before-completion, designing-before-coding
+**Examples:** TDD, box-verification-before-completion, designing-before-coding
 
 **Test with:**
 - Academic questions: Do they understand the rules?

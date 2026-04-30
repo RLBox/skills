@@ -1,5 +1,5 @@
 ---
-name: using-git-worktrees
+name: box-using-git-worktrees
 description: Use when starting feature work that needs isolation from current workspace or before executing implementation plans - creates isolated git worktrees with smart directory selection and safety verification
 ---
 
@@ -209,10 +209,10 @@ Ready to implement auth feature
 ## Integration
 
 **Called by:**
-- **brainstorming** (Phase 4) - REQUIRED when design is approved and implementation follows
-- **subagent-driven-development** - REQUIRED before executing any tasks
-- **executing-plans** - REQUIRED before executing any tasks
+- **box-brainstorming** (Phase 4) - REQUIRED when design is approved and implementation follows
+- **box-subagent-driven-development** - REQUIRED before executing any tasks
+- **box-executing-plans** - REQUIRED before executing any tasks
 - Any skill needing isolated workspace
 
 **Pairs with:**
-- **finishing-a-development-branch** - REQUIRED for cleanup after work complete
+- **box-finishing-a-development-branch** - REQUIRED for cleanup after work complete

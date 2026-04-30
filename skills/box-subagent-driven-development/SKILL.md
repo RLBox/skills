@@ -1,5 +1,5 @@
 ---
-name: subagent-driven-development
+name: box-subagent-driven-development
 description: Use when executing implementation plans with independent tasks in the current session
 ---
 
@@ -19,7 +19,7 @@ digraph when_to_use {
     "Tasks mostly independent?" [shape=diamond];
     "Stay in this session?" [shape=diamond];
     "subagent-driven-development" [shape=box];
-    "executing-plans" [shape=box];
+    "box-executing-plans" [shape=box];
     "Manual execution or brainstorm first" [shape=box];
 
     "Have implementation plan?" -> "Tasks mostly independent?" [label="yes"];
@@ -27,7 +27,7 @@ digraph when_to_use {
     "Tasks mostly independent?" -> "Stay in this session?" [label="yes"];
     "Tasks mostly independent?" -> "Manual execution or brainstorm first" [label="no - tightly coupled"];
     "Stay in this session?" -> "subagent-driven-development" [label="yes"];
-    "Stay in this session?" -> "executing-plans" [label="no - parallel session"];
+    "Stay in this session?" -> "box-executing-plans" [label="no - parallel session"];
 }
 ```
 

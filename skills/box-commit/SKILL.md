@@ -1,5 +1,5 @@
 ---
-name: commit
+name: box-commit
 description: 'Smart Git commit helper that analyzes changes, discards noise diffs (pg_dump/mysqldump version drift, whitespace-only changes, IDE auto-format noise), and creates semantic conventional commits grouped by purpose. Use when the user says commit, /commit, 帮我提交, commit代码, 生成commit, or similar.'
 user-invocable: true
 disable-model-invocation: false
