@@ -1,0 +1,253 @@
+{
+  "skill_name": "validator-spec-generator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我生成一个 validator：给张三预订明天深圳的酒店（1间房1成人，入住1晚），模块 hotel",
+      "expected_output": "应生成完整的 validator 代码文件到 ~/fliggy/app/validators/hotel/ 目录，使用模块内自动编号，包含 prepare、verify、simulate 三个核心方法",
+      "files": [],
+      "assertions": [
+        {
+          "name": "生成正确的文件路径",
+          "description": "文件应生成到 ~/fliggy/app/validators/hotel/hotel_XXX_validator.rb（编号自动递增）"
+        },
+        {
+          "name": "不使用旧的模块命名空间",
+          "description": "不应使用 module V001V050 等旧格式"
+        },
+        {
+          "name": "类名符合新命名规范",
+          "description": "类名应为 HotelXXXValidator（如 V001HotelValidator），继承自 BaseValidator"
+        },
+        {
+          "name": "包含完整的 metadata",
+          "description": "应包含 validator_id（如 v001_hotel_validator）、task_id（UUID）、title、timeout_seconds"
+        },
+        {
+          "name": "不包含 description 字段",
+          "description": "只应有 title 字段，不应有 description 字段"
+        },
+        {
+          "name": "包含详细的头部注释",
+          "description": "应包含任务描述、复杂度分析、评分标准、使用方法"
+        },
+        {
+          "name": "prepare 方法返回 Hash",
+          "description": "prepare 方法应设置实例变量并返回任务参数的 Hash"
+        },
+        {
+          "name": "verify 方法使用 add_assertion",
+          "description": "verify 方法应使用 add_assertion 验证结果，权重总和为 100"
+        },
+        {
+          "name": "正确处理数据版本",
+          "description": "查询基线数据使用 data_version: 0，创建执行数据使用 @data_version"
+        },
+        {
+          "name": "simulate 方法创建测试数据",
+          "description": "simulate 方法应模拟 AI Agent 操作，创建符合要求的订单"
+        },
+        {
+          "name": "自动创建模块目录",
+          "description": "如果 ~/fliggy/app/validators/hotel/ 不存在，应自动创建"
+        },
+        {
+          "name": "编号格式正确",
+          "description": "编号应为三位数字格式（001、002、003...）"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "创建一个 validator：给李四预订明天北京到上海的高铁票（二等座，最快），模块 train，编号 005",
+      "expected_output": "应生成到 ~/fliggy/app/validators/train/ 目录，使用指定的编号 005（如已存在则自动递增），包含完整的 validator 结构",
+      "files": [],
+      "assertions": [
+        {
+          "name": "使用指定的模块名",
+          "description": "应使用 train 模块，生成到 train/ 目录"
+        },
+        {
+          "name": "文件名符合规范",
+          "description": "文件名应为 v005_train_validator.rb（或如果 005 已存在，使用下一个可用编号）"
+        },
+        {
+          "name": "类名正确",
+          "description": "类名应为 V005TrainValidator（或对应的编号）"
+        },
+        {
+          "name": "validator_id 正确",
+          "description": "validator_id 应为 v005_train_validator（或对应的编号）"
+        },
+        {
+          "name": "task_id 是有效的 UUID",
+          "description": "task_id 应是新生成的 UUID，不是硬编码的值"
+        },
+        {
+          "name": "title 描述清晰",
+          "description": "title 应包含完整的任务描述：给李四预订明天北京到上海的高铁票（二等座，最快）"
+        },
+        {
+          "name": "prepare 方法包含必要参数",
+          "description": "应包含出发城市、到达城市、日期、座位类型等参数"
+        },
+        {
+          "name": "verify 方法验证关键字段",
+          "description": "应验证订单创建、出发地、目的地、座位类型、是否为最快列车等"
+        },
+        {
+          "name": "权重分配合理",
+          "description": "所有断言的 weight 总和应为 100"
+        },
+        {
+          "name": "编号冲突处理",
+          "description": "如果 005 已存在，应自动递增到 006 并提示用户"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "生成 validator：搜索深圳最便宜的景点门票（成人票），模块 attraction，不需要 simulate 方法",
+      "expected_output": "应生成包含 prepare 和 verify 的 validator，不包含 simulate 方法，使用 attraction 模块",
+      "files": [],
+      "assertions": [
+        {
+          "name": "文件路径正确",
+          "description": "应生成到 ~/fliggy/app/validators/attraction/attraction_XXX_validator.rb"
+        },
+        {
+          "name": "类名正确",
+          "description": "类名为 AttractionXXXValidator（如 V001AttractionValidator）"
+        },
+        {
+          "name": "包含 prepare 方法",
+          "description": "prepare 方法应设置城市、票种类型等参数"
+        },
+        {
+          "name": "包含 verify 方法",
+          "description": "verify 方法应验证搜索结果、价格排序、票种类型等"
+        },
+        {
+          "name": "不包含 simulate 方法",
+          "description": "代码中不应有 simulate 方法定义"
+        },
+        {
+          "name": "头部注释说明无 simulate",
+          "description": "复杂度分析或注释中应说明此任务为查询类任务，无需 simulate"
+        },
+        {
+          "name": "verify 使用正确的查询方式",
+          "description": "应查询 Ticket 表，使用 data_version: 0 查询基线数据"
+        },
+        {
+          "name": "权重分配覆盖所有验证点",
+          "description": "即使没有 simulate，verify 的权重总和仍应为 100"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "创建 validator：给王五预订后天广州长隆水上乐园亲子票（2大1小），模块 attraction，编号 055，要求包含完整的错误处理",
+      "expected_output": "应生成到 attraction 模块，使用编号 055（或下一个可用编号），包含完整的 validator 结构和错误处理逻辑",
+      "files": [],
+      "assertions": [
+        {
+          "name": "模块正确",
+          "description": "应生成到 ~/fliggy/app/validators/attraction/ 目录"
+        },
+        {
+          "name": "文件命名正确",
+          "description": "文件名应为 v055_attraction_validator.rb（或下一个可用编号）"
+        },
+        {
+          "name": "类名正确",
+          "description": "类名应为 V055AttractionValidator（或对应的编号）"
+        },
+        {
+          "name": "prepare 方法设置复杂参数",
+          "description": "应包含景点名称、票种类型（亲子票）、成人数量、儿童数量、日期等"
+        },
+        {
+          "name": "verify 包含错误消息",
+          "description": "每个断言应提供清晰的错误消息，格式为：期望值 vs 实际值"
+        },
+        {
+          "name": "使用 return unless 提前退出",
+          "description": "在核心实体验证失败后，应使用 return unless 避免后续断言报错"
+        },
+        {
+          "name": "验证复杂的票种组合",
+          "description": "应验证成人票数量、儿童票数量是否符合亲子票要求"
+        },
+        {
+          "name": "simulate 创建复杂订单",
+          "description": "simulate 应创建包含多张票的订单，正确设置数量和类型"
+        },
+        {
+          "name": "头部注释详细",
+          "description": "复杂度分析应列出所有验证步骤，评分标准应细化到每个验证点"
+        },
+        {
+          "name": "权重分配反映复杂度",
+          "description": "复杂验证点（如票种组合、数量验证）应分配更高的权重"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "生成一个通用的 validator：测试用户登录功能（不指定模块）",
+      "expected_output": "应使用默认的 common 模块，生成到 ~/fliggy/app/validators/common/ 目录",
+      "files": [],
+      "assertions": [
+        {
+          "name": "使用默认模块",
+          "description": "未指定模块时，应使用 common 作为默认模块"
+        },
+        {
+          "name": "文件路径正确",
+          "description": "应生成到 ~/fliggy/app/validators/common/common_XXX_validator.rb"
+        },
+        {
+          "name": "类名使用 Common 前缀",
+          "description": "类名应为 CommonXXXValidator（如 V001CommonValidator）"
+        },
+        {
+          "name": "validator_id 使用 common 前缀",
+          "description": "validator_id 应为 common_XXX_validator"
+        },
+        {
+          "name": "自动编号",
+          "description": "应扫描 common 目录，自动分配下一个可用编号"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "生成 validator：测试酒店搜索功能，模块 hotel，编号 003（假设 003 已存在）",
+      "expected_output": "应检测到 003 已存在，自动递增到 004 并提示用户",
+      "files": [],
+      "assertions": [
+        {
+          "name": "检测编号冲突",
+          "description": "应检测到 v003_hotel_validator.rb 已存在"
+        },
+        {
+          "name": "自动递增编号",
+          "description": "应自动使用 004 作为新编号"
+        },
+        {
+          "name": "提示用户",
+          "description": "应明确告诉用户：原编号 003 已存在，已自动使用 004"
+        },
+        {
+          "name": "生成正确的文件",
+          "description": "最终生成的文件应为 v004_hotel_validator.rb"
+        },
+        {
+          "name": "类名和 ID 匹配新编号",
+          "description": "类名应为 V004HotelValidator，validator_id 应为 v004_hotel_validator"
+        }
+      ]
+    }
+  ]
+}
