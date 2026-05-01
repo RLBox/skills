@@ -5,85 +5,85 @@ description: Use when completing tasks, implementing major features, or before m
 
 # Requesting Code Review
 
-Dispatch box:code-reviewer subagent to catch issues before they cascade. The reviewer gets precisely crafted context for evaluation — never your session's history. This keeps the reviewer focused on the work product, not your thought process, and preserves your own context for continued work.
+Perform a structured self-review to catch issues before they cascade. Read the diff with fresh eyes, evaluate it against the requirements, and surface problems clearly.
 
 **Core principle:** Review early, review often.
 
 ## When to Request Review
 
 **Mandatory:**
-- After each task in subagent-driven development
-- After completing major feature
+- After completing a major feature
 - Before merge to main
 
 **Optional but valuable:**
-- When stuck (fresh perspective)
+- When stuck (step back, review what you have)
 - Before refactoring (baseline check)
 - After fixing complex bug
 
-## How to Request
+## How to Review
 
-**1. Get git SHAs:**
+**1. Get git diff:**
 ```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
+BASE_SHA=$(git rev-parse origin/main)  # or the commit before your work
 HEAD_SHA=$(git rev-parse HEAD)
+git diff $BASE_SHA $HEAD_SHA
 ```
 
-**2. Dispatch code-reviewer subagent:**
+**2. Review the diff against requirements:**
 
-Use Task tool with box:code-reviewer type, fill template at `code-reviewer.md`
+Read every changed file. For each change ask:
+- Does this implement what was required?
+- Are there edge cases not handled?
+- Are there tests covering the logic?
+- Is there dead code, debug output, or accidental changes?
 
-**Placeholders:**
-- `{WHAT_WAS_IMPLEMENTED}` - What you just built
-- `{PLAN_OR_REQUIREMENTS}` - What it should do
-- `{BASE_SHA}` - Starting commit
-- `{HEAD_SHA}` - Ending commit
-- `{DESCRIPTION}` - Brief summary
+**3. Categorize issues:**
+- **Critical** — incorrect behavior, data loss risk, security issue → fix now
+- **Important** — missing test coverage, unhandled edge case → fix before proceeding
+- **Minor** — style, naming, small inefficiency → note for later
 
-**3. Act on feedback:**
+**4. Act on findings:**
 - Fix Critical issues immediately
 - Fix Important issues before proceeding
-- Note Minor issues for later
-- Push back if reviewer is wrong (with reasoning)
+- Note Minor issues (can defer)
+- If you disagree with your own finding, reason it out in a comment
+
+## Self-Review Checklist
+
+```
+[ ] Diff matches the stated requirement (no accidental changes)
+[ ] New logic has test coverage
+[ ] No TODO / placeholder left in production code
+[ ] Error paths handled
+[ ] No debug output / console.log / puts left in
+[ ] Commit messages are clean and descriptive
+```
 
 ## Example
 
 ```
 [Just completed Task 2: Add verification function]
 
-You: Let me request code review before proceeding.
-
 BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
 HEAD_SHA=$(git rev-parse HEAD)
+git diff $BASE_SHA $HEAD_SHA
 
-[Dispatch box:code-reviewer subagent]
-  WHAT_WAS_IMPLEMENTED: Verification and repair functions for conversation index
-  PLAN_OR_REQUIREMENTS: Task 2 from docs/architecture/2026-01-01-deployment-plan.md
-  BASE_SHA: a7981ec
-  HEAD_SHA: 3df7661
-  DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
+[Review diff against Task 2 requirements from docs/architecture/2026-01-01-deployment-plan.md]
 
-[Subagent returns]:
-  Strengths: Clean architecture, real tests
-  Issues:
-    Important: Missing progress indicators
-    Minor: Magic number (100) for reporting interval
-  Assessment: Ready to proceed
+Strengths: Clean architecture, real tests
+Issues:
+  Important: Missing progress indicators for long-running repair
+  Minor: Magic number (100) for reporting interval — extract to constant
 
-You: [Fix progress indicators]
+[Fix progress indicators]
 [Continue to Task 3]
 ```
 
 ## Integration with Workflows
 
-**Subagent-Driven Development:**
-- Review after EACH task
-- Catch issues before they compound
-- Fix before moving to next task
-
 **Executing Plans:**
-- Review after each batch (3 tasks)
-- Get feedback, apply, continue
+- Review after each task or batch
+- Fix issues before moving to next task
 
 **Ad-Hoc Development:**
 - Review before merge
@@ -95,11 +95,3 @@ You: [Fix progress indicators]
 - Skip review because "it's simple"
 - Ignore Critical issues
 - Proceed with unfixed Important issues
-- Argue with valid technical feedback
-
-**If reviewer wrong:**
-- Push back with technical reasoning
-- Show code/tests that prove it works
-- Request clarification
-
-See template at: requesting-code-review/code-reviewer.md

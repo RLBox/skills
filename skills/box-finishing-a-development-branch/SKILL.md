@@ -193,8 +193,7 @@ git worktree remove <worktree-path>
 ## Integration
 
 **Called by:**
-- **box-subagent-driven-development** (Step 7) - After all tasks complete
-- **box-executing-plans** (Step 5) - After all batches complete
+- **box-executing-plans** (Step 3) - After all tasks complete
 
 **Pairs with:**
 - **box-using-git-worktrees** - Cleans up worktree created by that skill
