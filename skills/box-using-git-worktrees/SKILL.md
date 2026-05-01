@@ -115,9 +115,108 @@ if [ -f pyproject.toml ]; then poetry install; fi
 
 # Go
 if [ -f go.mod ]; then go mod download; fi
+
+# Rails
+if [ -f Gemfile ]; then bundle install; fi
 ```
 
-### 4. Verify Clean Baseline
+### 4. Environment Isolation (Database & Port)
+
+**Purpose:** Give each worktree its own database and port so multiple worktrees can run simultaneously without conflicts.
+
+**⚠️ CRITICAL RULE: Never modify Git-tracked config files in the worktree** (like `config/database.yml`). Those changes show up in `git status` and risk accidental commits. All isolation must happen through **untracked files only** (`.env`, `.env.development`, etc.).
+
+**Only for projects with `config/database.yml`** (Rails and similar). Skip this entire step if no database config exists.
+
+#### 4a. Check if Project Supports Env-Based DB Override
+
+Read `config/database.yml` and check whether it reads database names from environment variables:
+
+```bash
+grep -E 'ENV\[|ENV\.fetch' config/database.yml
+```
+
+**If YES (already supports env vars):** Great — skip to 4c.
+
+**If NO (hardcoded database names):** Tell the user this is a one-time setup. Add a note: *"This project's database.yml doesn't support environment-based override. Run `box-worktree-rails-setup` for a one-time config change. For now, proceeding with default (shared) database."*
+
+<details>
+<summary>Recommendation for project maintainers (show once, then skip)</summary>
+
+Modify `config/database.yml` to support environment variable overrides:
+
+```yaml
+# config/database.yml
+development:
+  database: <%= ENV.fetch('WORKTREE_DEV_DB', 'goomart_db') %>
+
+test:
+  database: <%= ENV.fetch('WORKTREE_TEST_DB', 'goomart_test') %>
+```
+
+And if the project has `bin/db_init`, make it also respect these env vars (add after parsing database.yml):
+
+```ruby
+dev_db  = ENV['WORKTREE_DEV_DB']  || db_config.dig('development', 'database')
+test_db = ENV['WORKTREE_TEST_DB'] || db_config.dig('test', 'database')
+```
+
+After this one-time change (committed to main), all future worktrees get full DB isolation with zero config file edits.
+
+</details>
+
+#### 4b. Generate Unique Suffix
+
+Extract a short identifier from the branch name:
+
+```bash
+# feature/coupon → coupon
+# fix/login-bug → login-bug
+suffix=$(echo "$BRANCH_NAME" | sed 's|.*/||' | tr '/' '-')
+```
+
+#### 4c. Allocate Free Port
+
+Find next available port starting from 3001, write to `.env`:
+
+```bash
+port=3001
+while lsof -ti :$port >/dev/null 2>&1; do port=$((port+1)); done
+echo "PORT=$port" >> .env
+```
+
+#### 4d. Set Isolated Database Names in `.env` (only if project supports env override)
+
+```bash
+# Only if database.yml uses WORKTREE_DEV_DB / WORKTREE_TEST_DB
+echo "WORKTREE_DEV_DB=goomart_db_$suffix" >> .env
+echo "WORKTREE_TEST_DB=goomart_test_$suffix" >> .env
+```
+
+#### 4e. Initialize Isolated Databases (only if env override is active)
+
+```bash
+# For projects with bin/db_init:
+bin/db_init
+
+# For standard Rails projects:
+bin/rails db:create
+bin/rails db:migrate
+bin/rails db:test:prepare
+```
+
+#### 4f. Cleanup on Worktree Deletion
+
+When the worktree is deleted (by `box-finishing-a-development-branch`), also drop its isolated databases if they were created:
+
+```bash
+dropdb --if-exists goomart_db_$suffix
+dropdb --if-exists goomart_test_$suffix
+```
+
+**Why this matters:** Without cleanup, orphaned databases accumulate and waste disk space. `.env` is untracked and disappears with the worktree — no pollution.
+
+### 5. Verify Clean Baseline
 
 Run tests to ensure worktree starts clean:
 
@@ -133,7 +232,7 @@ go test ./...
 
 **If tests pass:** Report ready.
 
-### 5. Report Location
+### 6. Report Location
 
 ```
 Worktree ready at <full-path>
@@ -150,6 +249,8 @@ Ready to implement <feature-name>
 | Both exist | Use `.worktrees/` |
 | Neither exists | Check CLAUDE.md → Ask user |
 | Directory not ignored | Add to .gitignore + commit |
+| Rails/database.yml exists | Try env-based DB isolation (4a-4f) |
+| database.yml no env support | Skip DB isolation, suggest one-time config |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
 
@@ -165,6 +266,11 @@ Ready to implement <feature-name>
 - **Problem:** Creates inconsistency, violates project conventions
 - **Fix:** Follow priority: existing > CLAUDE.md > ask
 
+### Modifying Git-tracked config files for isolation
+
+- **Problem:** Changes to `config/database.yml` etc. show up in `git status`, risk accidental commits
+- **Fix:** Only modify untracked files (`.env`). If DB names are hardcoded, suggest one-time project config change — don't hack it in the worktree.
+
 ### Proceeding with failing tests
 
 - **Problem:** Can't distinguish new bugs from pre-existing issues
@@ -175,6 +281,11 @@ Ready to implement <feature-name>
 - **Problem:** Breaks on projects using different tools
 - **Fix:** Auto-detect from project files (package.json, etc.)
 
+### Forgetting to clean up isolated databases
+
+- **Problem:** Orphaned databases accumulate, waste disk space
+- **Fix:** When worktree is deleted, run `dropdb --if-exists` for its databases
+
 ## Example Workflow
 
 ```
@@ -182,19 +293,27 @@ You: I'm using the using-git-worktrees skill to set up an isolated workspace.
 
 [Check .worktrees/ - exists]
 [Verify ignored - git check-ignore confirms .worktrees/ is ignored]
-[Create worktree: git worktree add .worktrees/auth -b feature/auth]
-[Run npm install]
-[Run npm test - 47 passing]
+[Create worktree: git worktree add .worktrees/coupon -b feature/coupon]
+[Run bundle install]
+[Check database.yml - already supports WORKTREE_DEV_DB env var ✓]
+[Allocate port: 3001 is free → write PORT=3001 to .env]
+[Set DB names: WORKTREE_DEV_DB=goomart_db_coupon, WORKTREE_TEST_DB=goomart_test_coupon → .env]
+[bin/db_init → databases created, migrated, baseline loaded]
+[Run rspec - 47 passing]
 
-Worktree ready at /Users/jesse/myproject/.worktrees/auth
-Tests passing (47 tests, 0 failures)
-Ready to implement auth feature
+Worktree ready at /Users/runsheng/Goomart/.worktrees/coupon
+  Database: goomart_db_coupon / goomart_test_coupon
+  Port:     3001
+  Tests:    47 passing, 0 failures
+  Cleanup:  dropdb goomart_db_coupon goomart_test_coupon (on worktree delete)
+Ready to implement coupon feature
 ```
 
 ## Red Flags
 
 **Never:**
 - Create worktree without verifying it's ignored (project-local)
+- **Modify Git-tracked config files** (database.yml, puma.rb, etc.) for environment isolation
 - Skip baseline test verification
 - Proceed with failing tests without asking
 - Assume directory location when ambiguous
@@ -204,6 +323,9 @@ Ready to implement auth feature
 - Follow directory priority: existing > CLAUDE.md > ask
 - Verify directory is ignored for project-local
 - Auto-detect and run project setup
+- **Use `.env` (untracked) for port and database isolation** — never touch tracked configs
+- Allocate unique port (lsof check, start from 3001)
+- Clean up isolated databases when worktree is deleted
 - Verify clean test baseline
 
 ## Integration
