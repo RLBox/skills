@@ -21,15 +21,16 @@ Every project goes through this process. A todo list, a single-function utility,
 
 You MUST create a task for each of these items and complete them in order:
 
-1. **Explore project context** — check files, docs, recent commits
+1. **Explore project context** — check files, docs, recent commits; detect project doc structure
 2. **Offer visual companion** (if topic will involve visual questions) — this is its own message, not combined with a clarifying question. See the Visual Companion section below.
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit
-7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **User reviews written spec** — ask user to review the spec file before proceeding
-9. **Transition to implementation** — invoke box-writing-plans skill to create implementation plan
+6. **Write design doc** — detect project doc structure and save to the right path (see Documentation section below); commit
+7. **Add Validator Acceptance Scenarios** — if project has `app/validators/`, add a validator scenario list section to the spec (see below)
+8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
+9. **User reviews written spec** — ask user to review the spec file before proceeding
+10. **Transition to implementation** — invoke box-writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -108,10 +109,55 @@ digraph brainstorming {
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
-  - (User preferences for spec location override this default)
+Detect the project's doc structure before writing the spec. Check which of these paths exists:
+
+```
+docs/architecture/   → primary spec location (most design docs go here)
+docs/decisions/      → use for Architecture Decision Records (ADRs), i.e. "we chose X over Y because..."
+docs/superpowers/specs/  → legacy fallback only if the above don't exist
+```
+
+**Decision rule:**
+- If the spec describes a **new architectural pattern, technical approach, or system-wide decision** → write as ADR to `docs/decisions/ADR-NNN-<topic>.md` (find next ADR number first)
+- Otherwise → write to `docs/architecture/YYYY-MM-DD-<topic>-design.md`
+- If neither `docs/architecture/` nor `docs/decisions/` exist → fall back to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
+- User preferences for spec location always override these defaults
+
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git
+
+**Validator Acceptance Scenarios (Agent Benchmark 项目专用):**
+
+Check if the project has an `app/validators/` directory. If yes, this is an Agent Benchmark sandbox project — add a **Validator Acceptance Scenarios** section to the spec.
+
+This section captures acceptance scenarios in plain human language *before* any code is written. The goal: define what "done" looks like from a user/agent perspective. These scenarios become the source of truth for validator code written later (after implementation).
+
+**What to write:**
+- List 3–8 key scenarios for the feature being designed
+- Write each as a natural language task description (same format as validator titles: `给/帮 [用户] + 动词 + 目标 + 约束`)
+- For each scenario, note: what data must exist (baseline), what action the agent takes, what DB state proves success
+- Do NOT write Ruby code here — this is the human-readable spec, not the implementation
+
+**Template to append to the spec file:**
+
+```markdown
+## Validator Acceptance Scenarios
+
+> 功能完成后，参照此清单生成 validator 代码（使用 box-validator-generator skill）。
+> 人工校验：实现完成后逐条确认场景是否覆盖，补充遗漏场景，再生成代码。
+
+| # | 场景描述（validator title 格式） | 前置数据 | 验证点 |
+|---|---|---|---|
+| 1 | 给张三加购 2 斤有机苹果 | baseline: User demo@rlbox.ai, Product 有机苹果 | CartItem 新增 1 条，quantity=2，product=有机苹果 |
+| 2 | （下一个场景...） | ... | ... |
+
+### 注意事项
+- 场景描述不含字段名/id/URL/代码
+- 每个场景对应一个独立的 validator 文件
+- 完成实现后由人工校验场景是否准确，再交给 box-validator-generator 生成代码
+```
+
+Replace the example rows with real scenarios for this feature. Scale the table: 3 rows for simple features, up to 8 for complex ones. If the project doesn't have `app/validators/`, skip this section entirely.
 
 **Spec Self-Review:**
 After writing the spec document, look at it with fresh eyes:
