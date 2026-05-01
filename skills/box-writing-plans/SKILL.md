@@ -15,8 +15,15 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Context:** This should be run in a dedicated worktree (created by box-brainstorming skill).
 
-**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
-- (User preferences for plan location override this default)
+**Save plans to:** detect project doc structure first (same logic as box-brainstorming):
+
+```
+docs/architecture/ exists?  → save to docs/architecture/YYYY-MM-DD-<feature-name>-plan.md
+docs/superpowers/plans/ exists? → save there
+neither exist?              → create docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md
+```
+
+User preferences for plan location always override these defaults.
 
 ## Scope Check
 
@@ -135,7 +142,7 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 After saving the plan, offer execution choice:
 
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
+**\"Plan complete and saved to `<detected-path>/<filename>.md`. Two execution options:**
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 
