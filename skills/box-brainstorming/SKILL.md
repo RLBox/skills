@@ -89,21 +89,27 @@ digraph brainstorming {
 - Once you believe you understand what you're building, present the design
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
 - Ask after each section whether it looks right so far
-- Cover: architecture, components, data flow, error handling, testing
+- Cover: what the feature does, how the main pieces relate, how data flows between them, what happens when things go wrong, how success is measured
 - Be ready to go back and clarify if something doesn't make sense
 
-**Design for isolation and clarity:**
+**Stay at the concept level — not the implementation level:**
 
-- Break the system into smaller units that each have one clear purpose, communicate through well-defined interfaces, and can be understood and tested independently
-- For each unit, you should be able to answer: what does it do, how do you use it, and what does it depend on?
-- Can someone understand what a unit does without reading its internals? Can you change the internals without breaking consumers? If not, the boundaries need work.
-- Smaller, well-bounded units are also easier for you to work with - you reason better about code you can hold in context at once, and your edits are more reliable when files are focused. When a file grows large, that's often a signal that it's doing too much.
+The design step is about *what* the system does and *why*, not *how* it's built. Keep the language at the product/business layer:
+
+- ✅ "商品和内容帖子是多对多关系，一个帖子可以挂多个商品，一个商品也可以出现在多个帖子里"
+- ✅ "搜索时同时匹配帖子本身的文字和它挂载的商品名称"
+- ❌ "需要一个 feed_products 中间表，包含 feed_id, product_id, position 字段"
+- ❌ "`has_many :products, through: :feed_products`"
+- ❌ "scope 会 LEFT JOIN feed_products + products，ILIKE 同时匹配"
+
+No table schemas, no field names, no method names, no SQL, no code snippets in the design step. Those details belong in the implementation plan, not the spec.
 
 **Working in existing codebases:**
 
 - Explore the current structure before proposing changes. Follow existing patterns.
-- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
+- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), note the issue at the concept level in the design — don't dive into implementation details.
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
+- Keep any codebase observations at the product/behavior level in the design doc. Code-level details (file names, method names, schema) belong in the implementation plan, not here.
 
 ## After the Design
 
