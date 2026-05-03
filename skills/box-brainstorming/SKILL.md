@@ -5,96 +5,78 @@ description: "You MUST use this before any creative work - creating features, bu
 
 # Brainstorming Ideas Into Designs
 
-Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
+Turn ideas into fully formed designs through autonomous analysis. The agent does the thinking; the human approves the result.
 
-Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
+**Default mode: autonomous.** Explore the codebase, form your own opinions, draft the full design, then present it for a single approval. Do not ask the user questions unless you genuinely cannot make a reasonable assumption.
 
 <HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
+Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it.
 </HARD-GATE>
 
 ## Anti-Pattern: "This Is Too Simple To Need A Design"
 
-Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
+Every project goes through this process. A todo list, a single-function utility, a config change — all of them. The design can be short (a few sentences), but you MUST present it and get approval before implementing.
 
-## Checklist
+## Anti-Pattern: "I Need To Ask Before I Can Think"
 
-You MUST create a task for each of these items and complete them in order:
+Do NOT open with a series of clarifying questions. Explore the codebase first. Read docs, recent commits, existing patterns. Form your own answers. Only ask if you hit a genuine blocker that you cannot reasonably assume away. Most of the time you won't need to ask anything.
 
-1. **Explore project context** — check files, docs, recent commits; detect project doc structure
-2. **Offer visual companion** (if topic will involve visual questions) — this is its own message, not combined with a clarifying question. See the Visual Companion section below.
-3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
-4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — detect project doc structure and save to the right path (see Documentation section below); commit
-7. **Add Validator Acceptance Scenarios** — if project has `app/validators/`, add a validator scenario list section to the spec (see below)
-8. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-9. **User reviews written spec** — ask user to review the spec file before proceeding
-10. **Transition to implementation** — invoke box-writing-plans skill to create implementation plan
+---
 
-## Process Flow
+## How It Works
 
-```dot
-digraph brainstorming {
-    "Explore project context" [shape=box];
-    "Visual questions ahead?" [shape=diamond];
-    "Offer Visual Companion\n(own message, no other content)" [shape=box];
-    "Ask clarifying questions" [shape=box];
-    "Propose 2-3 approaches" [shape=box];
-    "Present design sections" [shape=box];
-    "User approves design?" [shape=diamond];
-    "Write design doc" [shape=box];
-    "Spec self-review\n(fix inline)" [shape=box];
-    "User reviews spec?" [shape=diamond];
-    "Invoke box-writing-plans skill" [shape=doublecircle];
+### Step 1 — Explore silently
 
-    "Explore project context" -> "Visual questions ahead?";
-    "Visual questions ahead?" -> "Offer Visual Companion\n(own message, no other content)" [label="yes"];
-    "Visual questions ahead?" -> "Ask clarifying questions" [label="no"];
-    "Offer Visual Companion\n(own message, no other content)" -> "Ask clarifying questions";
-    "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Present design sections";
-    "Present design sections" -> "User approves design?";
-    "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke box-writing-plans skill" [label="approved"];
-}
-```
+Before saying anything to the user, do all of this yourself:
 
-**The terminal state is invoking box-writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is box-writing-plans.
+- Read relevant files, docs, recent commits
+- Understand what already exists and what the request touches
+- Identify scope: is this one coherent feature, or multiple independent subsystems?
+  - If multiple subsystems: propose a decomposition and ask the user which to start with (this is the ONE allowed upfront question for large scope)
+- Form opinions on approach — pick the best one and be ready to justify it
 
-## The Process
+No message to the user yet.
 
-**Understanding the idea:**
+### Step 2 — Draft the full design internally
 
-- Check out the current project state first (files, docs, recent commits)
-- Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
-- If the project is too large for a single spec, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
-- For appropriately-scoped projects, ask questions one at a time to refine the idea
-- Prefer multiple choice questions when possible, but open-ended is fine too
-- Only one question per message - if a topic needs more exploration, break it into multiple questions
-- Focus on understanding: purpose, constraints, success criteria
+Still no message. Write the full design in your head (or scratchpad):
 
-**Exploring approaches:**
+- What the feature does
+- How the main pieces relate
+- How data flows between them
+- What happens when things go wrong
+- How success is measured
+- Which approach you recommend and why
+- If the project has `app/validators/`: draft acceptance scenarios
 
-- Propose 2-3 different approaches with trade-offs
-- Present options conversationally with your recommendation and reasoning
-- Lead with your recommended option and explain why
+Keep everything at the **concept level** — what and why, not how. See "Concept Level Rule" below.
 
-**Presenting the design:**
+### Step 3 — Present everything in one message
 
-- Once you believe you understand what you're building, present the design
-- Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
-- Ask after each section whether it looks right so far
-- Cover: what the feature does, how the main pieces relate, how data flows between them, what happens when things go wrong, how success is measured
-- Be ready to go back and clarify if something doesn't make sense
+Send ONE message that contains:
 
-**Stay at the concept level — not the implementation level:**
+1. **Your understanding** — "Here's what I think you're building: …" (1-2 sentences)
+2. **Approach chosen** — brief note on what you picked and why (skip the alternatives unless the tradeoff is genuinely important for the user to know)
+3. **Full design** — all sections, scaled to complexity
+4. **Acceptance scenarios** — if the project has `app/validators/`
+5. **Assumptions** — list any significant assumptions you made; invite correction
+6. **The ask** — "Does this look right? Any changes before I write the spec and plan?"
 
-The design step is about *what* the system does and *why*, not *how* it's built. Keep the language at the product/business layer:
+This is the **single human decision point**. Everything before this is agent work.
+
+### Step 4 — Incorporate feedback (if any) and write the spec
+
+If the user approves with no changes → write spec immediately, then invoke `box-writing-plans`.
+
+If the user requests changes → apply them, update the design in the same thread, confirm the change, then write spec and invoke `box-writing-plans`.
+
+Do NOT ask a follow-up "does this look right now?" loop. Make the change and proceed unless the user says stop.
+
+---
+
+## Concept Level Rule
+
+The design step is about *what* the system does and *why*, not *how* it's built.
 
 - ✅ "商品和内容帖子是多对多关系，一个帖子可以挂多个商品，一个商品也可以出现在多个帖子里"
 - ✅ "搜索时同时匹配帖子本身的文字和它挂载的商品名称"
@@ -102,115 +84,102 @@ The design step is about *what* the system does and *why*, not *how* it's built.
 - ❌ "`has_many :products, through: :feed_products`"
 - ❌ "scope 会 LEFT JOIN feed_products + products，ILIKE 同时匹配"
 
-No table schemas, no field names, no method names, no SQL, no code snippets in the design step. Those details belong in the implementation plan, not the spec.
+No table schemas, no field names, no method names, no SQL, no code snippets. Those belong in the implementation plan.
 
-**Working in existing codebases:**
+---
 
-- Explore the current structure before proposing changes. Follow existing patterns.
-- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), note the issue at the concept level in the design — don't dive into implementation details.
-- Don't propose unrelated refactoring. Stay focused on what serves the current goal.
-- Keep any codebase observations at the product/behavior level in the design doc. Code-level details (file names, method names, schema) belong in the implementation plan, not here.
+## When You CAN Ask Questions
 
-## After the Design
+Asking is the exception, not the default. You may ask when:
 
-**Documentation:**
+- **Scope is genuinely ambiguous** and the two interpretations lead to completely different designs (e.g., "is this a user-facing feature or an admin tool?")
+- **A key constraint is unknown** and you cannot safely assume it (e.g., "does this need to work offline?")
+- **The request decomposes into multiple independent subsystems** — ask which to start with
 
-Detect the project's doc structure before writing the spec. Check which of these paths exists:
+When you do ask: ask ONE question. Not a list. Make it multiple-choice when possible.
+
+Do NOT ask about:
+- Technical approach choices you can reason about yourself
+- Whether to follow existing patterns (always do)
+- Details you can infer from the codebase
+
+---
+
+## Writing the Spec
+
+After the user approves the design:
+
+**Where to save:**
 
 ```
-docs/architecture/   → primary spec location (most design docs go here)
-docs/decisions/      → use for Architecture Decision Records (ADRs), i.e. "we chose X over Y because..."
-docs/superpowers/specs/  → legacy fallback only if the above don't exist
+docs/architecture/   → primary spec location
+docs/decisions/      → for Architecture Decision Records (ADRs): "we chose X over Y because..."
+docs/superpowers/specs/  → legacy fallback only
 ```
 
-**Decision rule:**
-- If the spec describes a **new architectural pattern, technical approach, or system-wide decision** → write as ADR to `docs/decisions/ADR-NNN-<topic>.md` (find next ADR number first)
-- Otherwise → write to `docs/architecture/YYYY-MM-DD-<topic>-design.md`
-- If neither `docs/architecture/` nor `docs/decisions/` exist → fall back to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
-- User preferences for spec location always override these defaults
+- New architectural pattern or system-wide decision → ADR in `docs/decisions/ADR-NNN-<topic>.md`
+- Everything else → `docs/architecture/YYYY-MM-DD-<topic>-design.md`
+- Neither path exists → `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
 
-- Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+**After writing:**
 
-**Validator Acceptance Scenarios (Agent Benchmark 项目专用):**
+Run a quick self-review before committing:
+1. Any TBD/TODO/incomplete sections? Fill them in.
+2. Internal contradictions? Resolve them.
+3. Scope too large for one plan? Flag and decompose.
+4. Anything ambiguous? Pick an interpretation and make it explicit.
 
-Check if the project has an `app/validators/` directory. If yes, this is an Agent Benchmark sandbox project — add a **Validator Acceptance Scenarios** section to the spec.
+Then commit the spec, and immediately invoke `box-writing-plans`.
 
-This section captures acceptance scenarios in plain human language *before* any code is written. The goal: define what "done" looks like from a user/agent perspective. These scenarios become the source of truth for validator code written later (after implementation).
+Do NOT send a "please review the spec file" message to the user. The approval already happened in Step 3. Just write, commit, and proceed.
 
-**What to write:**
-- List 3–8 key scenarios for the feature being designed
-- Write each as a natural language task description (same format as validator titles: `给/帮 [用户] + 动词 + 目标 + 约束`)
-- For each scenario, note: what data must exist (baseline), what action the agent takes, what DB state proves success
-- Do NOT write Ruby code here — this is the human-readable spec, not the implementation
+---
 
-**Template to append to the spec file:**
+## Validator Acceptance Scenarios
+
+Check if the project has `app/validators/`. If yes, add this section to the spec:
 
 ```markdown
 ## Validator Acceptance Scenarios
 
 > 功能完成后，参照此清单生成 validator 代码（使用 box-validator-generator skill）。
-> 人工校验：实现完成后逐条确认场景是否覆盖，补充遗漏场景，再生成代码。
 
-| # | 场景描述（validator title 格式） | 前置数据 | 验证点 |
+| # | 场景描述 | 前置数据 | 验证点 |
 |---|---|---|---|
-| 1 | 给张三加购 2 斤有机苹果 | baseline: User demo@rlbox.ai, Product 有机苹果 | CartItem 新增 1 条，quantity=2，product=有机苹果 |
-| 2 | （下一个场景...） | ... | ... |
-
-### 注意事项
-- 场景描述不含字段名/id/URL/代码
-- 每个场景对应一个独立的 validator 文件
-- 完成实现后由人工校验场景是否准确，再交给 box-validator-generator 生成代码
+| 1 | 给张三加购 2 斤有机苹果 | User demo@rlbox.ai, Product 有机苹果 | CartItem 新增 1 条，quantity=2 |
 ```
 
-Replace the example rows with real scenarios for this feature. Scale the table: 3 rows for simple features, up to 8 for complex ones. If the project doesn't have `app/validators/`, skip this section entirely.
+- 3 rows for simple features, up to 8 for complex ones
+- Scenario descriptions: natural language, no field names/IDs/code
+- Skip entirely if no `app/validators/`
 
-**Spec Self-Review:**
-After writing the spec document, look at it with fresh eyes:
+---
 
-1. **Placeholder scan:** Any "TBD", "TODO", incomplete sections, or vague requirements? Fix them.
-2. **Internal consistency:** Do any sections contradict each other? Does the architecture match the feature descriptions?
-3. **Scope check:** Is this focused enough for a single implementation plan, or does it need decomposition?
-4. **Ambiguity check:** Could any requirement be interpreted two different ways? If so, pick one and make it explicit.
+## Working in Existing Codebases
 
-Fix any issues inline. No need to re-review — just fix and move on.
+- Read the codebase before proposing anything. Follow existing patterns.
+- Note structural issues at the concept level only — don't surface file names, method names, or schema details in the design.
+- Don't propose unrelated refactoring. Stay focused on the current goal.
 
-**User Review Gate:**
-After the spec review loop passes, ask the user to review the written spec before proceeding:
-
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
-
-Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
-
-**Implementation:**
-
-- Invoke the box-writing-plans skill to create a detailed implementation plan
-- Do NOT invoke any other skill. box-writing-plans is the next step.
-
-## Key Principles
-
-- **One question at a time** - Don't overwhelm with multiple questions
-- **Multiple choice preferred** - Easier to answer than open-ended when possible
-- **YAGNI ruthlessly** - Remove unnecessary features from all designs
-- **Explore alternatives** - Always propose 2-3 approaches before settling
-- **Incremental validation** - Present design, get approval before moving on
-- **Be flexible** - Go back and clarify when something doesn't make sense
+---
 
 ## Visual Companion
 
-A browser-based companion for showing mockups, diagrams, and visual options during brainstorming. Available as a tool — not a mode. Accepting the companion means it's available for questions that benefit from visual treatment; it does NOT mean every question goes through the browser.
+When upcoming questions will involve visual content (layouts, diagrams), offer the companion once:
 
-**Offering the companion:** When you anticipate that upcoming questions will involve visual content (mockups, layouts, diagrams), offer it once for consent:
-> "Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, diagrams, comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)"
+> "Some of what we're working on might be easier to explain visually. I can show mockups, diagrams, and comparisons in a browser as we go. Want to try it?"
 
-**This offer MUST be its own message.** Do not combine it with clarifying questions, context summaries, or any other content. The message should contain ONLY the offer above and nothing else. Wait for the user's response before continuing. If they decline, proceed with text-only brainstorming.
+**This offer must be its own message.** Wait for response before continuing.
 
-**Per-question decision:** Even after the user accepts, decide FOR EACH QUESTION whether to use the browser or the terminal. The test: **would the user understand this better by seeing it than reading it?**
+Even after the user accepts, use the browser only for genuinely visual content. Text options, tradeoffs, and conceptual questions go in the terminal.
 
-- **Use the browser** for content that IS visual — mockups, wireframes, layout comparisons, architecture diagrams, side-by-side visual designs
-- **Use the terminal** for content that is text — requirements questions, conceptual choices, tradeoff lists, A/B/C/D text options, scope decisions
+If they agree, read: `skills/brainstorming/visual-companion.md`
 
-A question about a UI topic is not automatically a visual question. "What does personality mean in this context?" is a conceptual question — use the terminal. "Which wizard layout works better?" is a visual question — use the browser.
+---
 
-If they agree to the companion, read the detailed guide before proceeding:
-`skills/brainstorming/visual-companion.md`
+## Implementation
+
+After spec is written and committed:
+
+- Invoke `box-writing-plans` to create the implementation plan
+- Do NOT invoke any other skill
