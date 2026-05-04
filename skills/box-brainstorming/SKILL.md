@@ -144,13 +144,45 @@ Check if the project has `app/validators/`. If yes, add this section to the spec
 
 > 功能完成后，参照此清单生成 validator 代码（使用 box-validator-generator skill）。
 
-| # | 场景描述 | 前置数据 | 验证点 |
-|---|---|---|---|
-| 1 | 给张三加购 2 斤有机苹果 | User demo@rlbox.ai, Product 有机苹果 | CartItem 新增 1 条，quantity=2 |
+| # | 任务指令（Task） | 验证点 |
+|---|---|---|
+| 1 | 给张三加购 2 斤有机苹果 | 购物车新增苹果，数量为 2 |
+| 2 | 选择 60 天档位礼包并加入星愿之旅活动 | 用户加入活动，档位为 60 天 |
+| 3 | 完成首日打卡 | 打卡记录新增 1 条，打卡日期为今天 |
 ```
 
+### 任务指令（Task）列的写法规则
+
+**本质：这是给 AI Agent 下达的任务，不是测试用例的描述。**
+
+✅ 正确——人类视角，说明要做什么：
+- `给张三加购 2 斤有机苹果`
+- `从 60 天档位切换到 15 天档位`
+- `已满 15 天后，领取一份奖品`
+- `同日内再次打卡`（让 Agent 做这件事，observe 结果）
+
+❌ 错误——测试/断言视角，说的是预期结果而非任务指令：
+- `同日内尝试重复打卡不应叠加天数`（「不应」是断言，不是任务）
+- `仅完成 3/4 个任务，不应计今日打卡`（「不应」是断言，不是任务）
+- `验证重复打卡不会叠加`（「验证」是测试语气）
+- `检查打卡状态是否正确`（「检查」是测试语气）
+
+**判断标准**：把这句话告诉真人，他知道该做什么吗？
+- `给张三加购 2 斤有机苹果` → 真人知道怎么做 ✅
+- `同日内尝试重复打卡不应叠加天数` → 真人不知道"做什么" ❌
+
+边界场景（异常路径）的写法——描述操作，把预期写进「验证点」：
+
+| # | 任务指令（Task） | 验证点 |
+|---|---|---|
+| 4 | 今天已打卡后，再次尝试打卡 | 系统拒绝，打卡天数不变 |
+| 5 | 只完成 3 个任务后尝试打卡（共需 4 个） | 系统拒绝，打卡天数不变 |
+
+---
+
 - 3 rows for simple features, up to 8 for complex ones
-- Scenario descriptions: natural language, no field names/IDs/code
+- Task column: what the user/agent does — human language, no field names/IDs/code/assertions
+- 验证点 column: what success looks like — observable outcome, not code assertions
 - Skip entirely if no `app/validators/`
 
 ---
