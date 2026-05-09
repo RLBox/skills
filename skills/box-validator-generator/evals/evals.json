@@ -1,251 +1,263 @@
 {
-  "skill_name": "validator-spec-generator",
+  "skill_name": "box-validator-generator",
   "evals": [
     {
       "id": 1,
-      "prompt": "帮我生成一个 validator：给张三预订明天深圳的酒店（1间房1成人，入住1晚），模块 hotel",
-      "expected_output": "应生成完整的 validator 代码文件到 ~/fliggy/app/validators/hotel/ 目录，使用模块内自动编号，包含 prepare、verify、simulate 三个核心方法",
+      "prompt": "帮我生成一个 validator：给张三发布一个标价 4999 元的二手 iPhone 15，模块 post",
+      "expected_output": "应生成完整的 validator 代码文件到 app/validators/post/ 目录，使用 Validators::Post 命名空间，包含 prepare、execution_state_data、restore_from_state、verify、simulate 五个核心方法",
       "files": [],
       "assertions": [
         {
           "name": "生成正确的文件路径",
-          "description": "文件应生成到 ~/fliggy/app/validators/hotel/hotel_XXX_validator.rb（编号自动递增）"
+          "description": "文件应生成到 app/validators/post/v{NNN}_post_validator.rb（编号自动递增）"
         },
         {
-          "name": "不使用旧的模块命名空间",
-          "description": "不应使用 module V001V050 等旧格式"
+          "name": "类名使用 Validators 命名空间",
+          "description": "类名应为 Validators::Post::V{NNN}PostValidator < Validators::BaseValidator"
         },
         {
-          "name": "类名符合新命名规范",
-          "description": "类名应为 HotelXXXValidator（如 V001HotelValidator），继承自 BaseValidator"
+          "name": "validator_id 带模块前缀",
+          "description": "应为 'post/v{NNN}_post_validator'（带 post/ 前缀）"
         },
         {
-          "name": "包含完整的 metadata",
-          "description": "应包含 validator_id（如 v001_hotel_validator）、task_id（UUID）、title、timeout_seconds"
+          "name": "不包含 require_relative",
+          "description": "Zeitwerk 自动加载，不应有 require_relative '../base_validator'"
         },
         {
-          "name": "不包含 description 字段",
-          "description": "只应有 title 字段，不应有 description 字段"
+          "name": "包含完整 metadata",
+          "description": "应包含 validator_id、task_id（固定UUID）、title、timeout_seconds"
         },
         {
-          "name": "包含详细的头部注释",
-          "description": "应包含任务描述、复杂度分析、评分标准、使用方法"
+          "name": "prepare 的 task 遵循五要素",
+          "description": "task 应包含：身份（以张三的身份）→ 入口（点击底部发布按钮）→ 动作（填写标题/价格）→ 目标值（具体文字）→ 完成（点击发布）"
         },
         {
-          "name": "prepare 方法返回 Hash",
-          "description": "prepare 方法应设置实例变量并返回任务参数的 Hash"
+          "name": "prepare 返回 hint 字段",
+          "description": "应有简化路径提示（用 → 连接步骤）"
         },
         {
-          "name": "verify 方法使用 add_assertion",
-          "description": "verify 方法应使用 add_assertion 验证结果，权重总和为 100"
+          "name": "有 execution_state_data 方法",
+          "description": "应返回包含 user_id 等需要持久化的状态 Hash"
         },
         {
-          "name": "正确处理数据版本",
-          "description": "查询基线数据使用 data_version: 0，创建执行数据使用 @data_version"
+          "name": "有 restore_from_state 方法",
+          "description": "应从 data Hash 恢复 @user 等实例变量"
         },
         {
-          "name": "simulate 方法创建测试数据",
-          "description": "simulate 方法应模拟 AI Agent 操作，创建符合要求的订单"
+          "name": "verify 使用 user_ids_for",
+          "description": "查询 user 相关记录时应使用 user_ids_for(@user) 兼容 sandbox user"
         },
         {
-          "name": "自动创建模块目录",
-          "description": "如果 ~/fliggy/app/validators/hotel/ 不存在，应自动创建"
+          "name": "verify 有 guard clause",
+          "description": "应有 return if @record.nil? 防止后续断言 NPE"
         },
         {
-          "name": "编号格式正确",
-          "description": "编号应为三位数字格式（001、002、003...）"
+          "name": "verify 权重总和 = 100",
+          "description": "所有 add_assertion 的 weight 加起来应等于 100"
+        },
+        {
+          "name": "simulate 不传 data_version",
+          "description": "simulate 中 create! 不应传 data_version 参数（DataVersionable 自动处理）"
+        },
+        {
+          "name": "包含详细头部注释",
+          "description": "应包含任务描述、复杂度分析、评分标准"
         }
       ]
     },
     {
       "id": 2,
-      "prompt": "创建一个 validator：给李四预订明天北京到上海的高铁票（二等座，最快），模块 train，编号 005",
-      "expected_output": "应生成到 ~/fliggy/app/validators/train/ 目录，使用指定的编号 005（如已存在则自动递增），包含完整的 validator 结构",
+      "prompt": "创建一个 validator：以张三的身份购买三星固态硬盘，选支付宝付款，模块 order",
+      "expected_output": "应生成 order 模块的 validator，task 描述包含完整购买流程路径",
       "files": [],
       "assertions": [
         {
-          "name": "使用指定的模块名",
-          "description": "应使用 train 模块，生成到 train/ 目录"
+          "name": "文件在 order 模块目录下",
+          "description": "文件应在 app/validators/order/ 目录下"
         },
         {
-          "name": "文件名符合规范",
-          "description": "文件名应为 v005_train_validator.rb（或如果 005 已存在，使用下一个可用编号）"
+          "name": "类名格式正确",
+          "description": "类名应为 Validators::Order::V{NNN}OrderValidator"
         },
         {
-          "name": "类名正确",
-          "description": "类名应为 V005TrainValidator（或对应的编号）"
+          "name": "task 包含购买全流程",
+          "description": "task 应包含：找到帖子 → 进入详情 → 点击「立即购买」→ 选地址 → 选支付宝 → 确认支付"
         },
         {
-          "name": "validator_id 正确",
-          "description": "validator_id 应为 v005_train_validator（或对应的编号）"
+          "name": "verify 检查订单存在",
+          "description": "应有断言检查 Order 是否创建"
         },
         {
-          "name": "task_id 是有效的 UUID",
-          "description": "task_id 应是新生成的 UUID，不是硬编码的值"
+          "name": "verify 检查支付方式",
+          "description": "应有断言检查支付方式是否为支付宝"
         },
         {
-          "name": "title 描述清晰",
-          "description": "title 应包含完整的任务描述：给李四预订明天北京到上海的高铁票（二等座，最快）"
+          "name": "execution_state_data 包含订单相关状态",
+          "description": "应持久化 user_id、post_id、expected_amount 等"
         },
         {
-          "name": "prepare 方法包含必要参数",
-          "description": "应包含出发城市、到达城市、日期、座位类型等参数"
-        },
-        {
-          "name": "verify 方法验证关键字段",
-          "description": "应验证订单创建、出发地、目的地、座位类型、是否为最快列车等"
-        },
-        {
-          "name": "权重分配合理",
-          "description": "所有断言的 weight 总和应为 100"
-        },
-        {
-          "name": "编号冲突处理",
-          "description": "如果 005 已存在，应自动递增到 006 并提示用户"
+          "name": "simulate 不传 data_version",
+          "description": "Order.create! 不应传 data_version"
         }
       ]
     },
     {
       "id": 3,
-      "prompt": "生成 validator：搜索深圳最便宜的景点门票（成人票），模块 attraction，不需要 simulate 方法",
-      "expected_output": "应生成包含 prepare 和 verify 的 validator，不包含 simulate 方法，使用 attraction 模块",
+      "prompt": "生成 validator：在三星固态硬盘帖子下给卖家发私信问能不能包邮",
+      "expected_output": "应自动识别为 message 模块，task 描述包含私信发送全流程",
       "files": [],
       "assertions": [
         {
-          "name": "文件路径正确",
-          "description": "应生成到 ~/fliggy/app/validators/attraction/attraction_XXX_validator.rb"
+          "name": "自动识别模块为 message",
+          "description": "任务描述含'私信'，应自动归到 message 模块"
         },
         {
-          "name": "类名正确",
-          "description": "类名为 AttractionXXXValidator（如 V001AttractionValidator）"
+          "name": "task 包含私信全流程",
+          "description": "task 应包含：找到帖子 → 进入详情 → 点击「私信」按钮 → 输入消息 → 发送"
         },
         {
-          "name": "包含 prepare 方法",
-          "description": "prepare 方法应设置城市、票种类型等参数"
+          "name": "verify 用 user_ids_for 查消息",
+          "description": "Message.where 应用 sender_id: user_ids_for(@user)"
         },
         {
-          "name": "包含 verify 方法",
-          "description": "verify 方法应验证搜索结果、价格排序、票种类型等"
+          "name": "verify 检查消息内容",
+          "description": "应有断言检查 Message 的 content 是否正确"
         },
         {
-          "name": "不包含 simulate 方法",
-          "description": "代码中不应有 simulate 方法定义"
+          "name": "simulate 创建 Conversation + Message",
+          "description": "simulate 应同时处理 Conversation 和 Message"
         },
         {
-          "name": "头部注释说明无 simulate",
-          "description": "复杂度分析或注释中应说明此任务为查询类任务，无需 simulate"
-        },
-        {
-          "name": "verify 使用正确的查询方式",
-          "description": "应查询 Ticket 表，使用 data_version: 0 查询基线数据"
-        },
-        {
-          "name": "权重分配覆盖所有验证点",
-          "description": "即使没有 simulate，verify 的权重总和仍应为 100"
+          "name": "有 guard clause",
+          "description": "应有 return if @message.nil? 防止后续断言 NPE"
         }
       ]
     },
     {
       "id": 4,
-      "prompt": "创建 validator：给王五预订后天广州长隆水上乐园亲子票（2大1小），模块 attraction，编号 055，要求包含完整的错误处理",
-      "expected_output": "应生成到 attraction 模块，使用编号 055（或下一个可用编号），包含完整的 validator 结构和错误处理逻辑",
+      "prompt": "生成 validator：给张三添加一个深圳南山区的收货地址",
+      "expected_output": "应生成 address 模块的 validator，task 包含完整的地址新增操作路径",
       "files": [],
       "assertions": [
         {
-          "name": "模块正确",
-          "description": "应生成到 ~/fliggy/app/validators/attraction/ 目录"
+          "name": "自动识别模块为 address",
+          "description": "任务描述含'地址'，应自动归到 address 模块"
         },
         {
-          "name": "文件命名正确",
-          "description": "文件名应为 v055_attraction_validator.rb（或下一个可用编号）"
+          "name": "task 包含完整操作路径",
+          "description": "task 应包含：进入「我的」→「地址管理」→「新增地址」→ 填写各项 → 保存"
         },
         {
-          "name": "类名正确",
-          "description": "类名应为 V055AttractionValidator（或对应的编号）"
+          "name": "task 包含具体字段值",
+          "description": "task 应列出收货人、手机号、省市区、详细地址等具体值"
         },
         {
-          "name": "prepare 方法设置复杂参数",
-          "description": "应包含景点名称、票种类型（亲子票）、成人数量、儿童数量、日期等"
+          "name": "verify 检查地址存在",
+          "description": "应有断言检查 Address 是否创建"
         },
         {
-          "name": "verify 包含错误消息",
-          "description": "每个断言应提供清晰的错误消息，格式为：期望值 vs 实际值"
+          "name": "verify 检查城市和区域",
+          "description": "应有断言检查地址的省市区是否正确"
         },
         {
-          "name": "使用 return unless 提前退出",
-          "description": "在核心实体验证失败后，应使用 return unless 避免后续断言报错"
-        },
-        {
-          "name": "验证复杂的票种组合",
-          "description": "应验证成人票数量、儿童票数量是否符合亲子票要求"
-        },
-        {
-          "name": "simulate 创建复杂订单",
-          "description": "simulate 应创建包含多张票的订单，正确设置数量和类型"
-        },
-        {
-          "name": "头部注释详细",
-          "description": "复杂度分析应列出所有验证步骤，评分标准应细化到每个验证点"
-        },
-        {
-          "name": "权重分配反映复杂度",
-          "description": "复杂验证点（如票种组合、数量验证）应分配更高的权重"
+          "name": "simulate 不传 data_version",
+          "description": "Address.create! 不应传 data_version"
         }
       ]
     },
     {
       "id": 5,
-      "prompt": "生成一个通用的 validator：测试用户登录功能（不指定模块）",
-      "expected_output": "应使用默认的 common 模块，生成到 ~/fliggy/app/validators/common/ 目录",
+      "prompt": "生成 validator：搜索「耳机」关键词",
+      "expected_output": "应自动识别为 search 模块，task 描述包含搜索操作全流程",
       "files": [],
       "assertions": [
         {
-          "name": "使用默认模块",
-          "description": "未指定模块时，应使用 common 作为默认模块"
+          "name": "自动识别模块为 search",
+          "description": "任务描述含'搜索'，应自动归到 search 模块"
         },
         {
-          "name": "文件路径正确",
-          "description": "应生成到 ~/fliggy/app/validators/common/common_XXX_validator.rb"
+          "name": "task 包含搜索全流程",
+          "description": "task 应包含：点击首页顶部搜索框 → 输入「耳机」→ 点击搜索按钮执行搜索"
         },
         {
-          "name": "类名使用 Common 前缀",
-          "description": "类名应为 CommonXXXValidator（如 V001CommonValidator）"
+          "name": "类名格式正确",
+          "description": "类名应为 Validators::Search::V{NNN}SearchValidator"
         },
         {
-          "name": "validator_id 使用 common 前缀",
-          "description": "validator_id 应为 common_XXX_validator"
-        },
-        {
-          "name": "自动编号",
-          "description": "应扫描 common 目录，自动分配下一个可用编号"
+          "name": "validator_id 格式正确",
+          "description": "应为 'search/v{NNN}_search_validator'"
         }
       ]
     },
     {
       "id": 6,
-      "prompt": "生成 validator：测试酒店搜索功能，模块 hotel，编号 003（假设 003 已存在）",
-      "expected_output": "应检测到 003 已存在，自动递增到 004 并提示用户",
+      "prompt": "生成 validator：收藏索尼降噪耳机帖子",
+      "expected_output": "应自动识别为 favorite 模块，task 描述包含收藏操作路径",
       "files": [],
       "assertions": [
         {
-          "name": "检测编号冲突",
-          "description": "应检测到 v003_hotel_validator.rb 已存在"
+          "name": "自动识别模块为 favorite",
+          "description": "任务描述含'收藏'，应自动归到 favorite 模块"
         },
         {
-          "name": "自动递增编号",
-          "description": "应自动使用 004 作为新编号"
+          "name": "task 包含收藏操作路径",
+          "description": "task 应包含：找到帖子 → 进入详情 → 点击「收藏」按钮"
         },
         {
-          "name": "提示用户",
-          "description": "应明确告诉用户：原编号 003 已存在，已自动使用 004"
+          "name": "verify 用 user_ids_for",
+          "description": "Favorite.where 应用 user_id: user_ids_for(@user)"
         },
         {
-          "name": "生成正确的文件",
-          "description": "最终生成的文件应为 v004_hotel_validator.rb"
+          "name": "有 execution_state_data",
+          "description": "应持久化 user_id 和 post_id"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "生成 validator：以张三的身份修改昵称为「小龙虾」",
+      "expected_output": "应自动识别为 user 模块，task 描述包含编辑资料操作路径",
+      "files": [],
+      "assertions": [
+        {
+          "name": "自动识别模块为 user",
+          "description": "任务描述含'昵称'，应自动归到 user 模块"
         },
         {
-          "name": "类名和 ID 匹配新编号",
-          "description": "类名应为 V004HotelValidator，validator_id 应为 v004_hotel_validator"
+          "name": "task 包含编辑资料路径",
+          "description": "task 应包含：进入「我的」→「编辑资料」→ 修改昵称 → 保存"
+        },
+        {
+          "name": "task 包含具体目标值",
+          "description": "task 应明确写出新昵称「小龙虾」"
+        },
+        {
+          "name": "verify 检查昵称变更",
+          "description": "应有断言检查 User 的 nickname 是否更新"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "生成 validator：取消蹲蹲（已蹲蹲的帖子）",
+      "expected_output": "应自动识别为 like 模块，task 描述包含取消蹲蹲的操作路径",
+      "files": [],
+      "assertions": [
+        {
+          "name": "自动识别模块为 like",
+          "description": "任务描述含'蹲蹲'，应自动归到 like 模块"
+        },
+        {
+          "name": "task 描述取消操作",
+          "description": "task 应说明点击已亮起的「蹲一蹲」按钮取消蹲蹲"
+        },
+        {
+          "name": "需要 seed 预制蹲蹲记录",
+          "description": "取消操作需要先有 Like 记录，应在 seed 中创建"
+        },
+        {
+          "name": "verify 检查 Like 记录被删除",
+          "description": "应有断言检查 Like 记录不再存在"
         }
       ]
     }
