@@ -724,21 +724,31 @@ bundle exec rails runner "V002ReorderPreviousValidator.new.execute_simulate"
 
 ## Task UUID
 
-每个 validator 的 `self.task_id` 需要一个唯一 UUID。生成方式：
+每个 validator 的 `self.task_id` 有两种合法写法，二选一：
 
+**方案 A：硬编码 UUID**（推荐，task 与后端绑定的场景）
 ```ruby
-# 在 Ruby 里
-require 'securerandom'
-SecureRandom.uuid
-# => "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+self.task_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
 ```
 
-或在 shell 里：
+在 shell 里生成一次，然后直接贴进去：
 ```bash
 ruby -rsecurerandom -e 'puts SecureRandom.uuid'
 ```
 
-Skill 生成时直接写进模板，**不要**用 `SecureRandom.uuid` 作为值（那样每次加载都不同）。
+**方案 B：不写（留空）**
+```ruby
+# 直接省略 self.task_id 这行，BaseValidator 会处理 nil
+```
+
+⚠️ **严禁以下写法**：
+
+```ruby
+# ❌ 绝对禁止：每次类加载都生成不同 UUID，task_id 飘移不定
+self.task_id = SecureRandom.uuid
+```
+
+`SecureRandom.uuid` 只能在 shell/console 里**一次性**生成 UUID，然后把结果**硬编码**进去。绝不能把 `SecureRandom.uuid` 直接赋值给 `self.task_id`，那样每次 Rails 加载类时 UUID 都会变，导致任务 ID 飘移、无法复现和追踪。
 
 ## 反模式速查（见到就停手）
 
@@ -820,6 +830,12 @@ def verify
 end
 # ✅ 正确：
 @comment = Comment.where(user_id: user_ids_for(@user), data_version: @data_version).first
+
+# ❌ 反例 M：task_id 用 SecureRandom.uuid 动态赋值（UUID 每次类加载都飘移）
+self.task_id = SecureRandom.uuid   # ❌ 每次 Rails 加载这个类，task_id 都不同！
+# ✅ 正确：二选一
+self.task_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'  # 方案 A：一次性生成后硬编码
+# 或者直接省略这行                                        # 方案 B：留空，BaseValidator 处理 nil
 ```
 
 ## 会话结束 Checklist
