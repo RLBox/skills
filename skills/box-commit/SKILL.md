@@ -1,6 +1,6 @@
 ---
 name: box-commit
-description: 'Smart Git commit helper that analyzes changes, discards noise diffs (pg_dump/mysqldump version drift, whitespace-only changes, IDE auto-format noise), and creates semantic conventional commits grouped by purpose. Use when the user says commit, /commit, 帮我提交, commit代码, 生成commit, or similar.'
+description: 'Smart Git commit helper that analyzes changes and creates semantic conventional commits grouped by purpose. Use when the user says commit, /commit, 帮我提交, commit代码, 生成commit, or similar.'
 user-invocable: true
 disable-model-invocation: false
 ---
@@ -30,13 +30,14 @@ This skill automates the process of reviewing git changes and creating meaningfu
 
 This skill prioritizes understanding the OVERALL GOAL of changes before deciding how to commit them. The default approach is to:
 1. Understand what the developer is trying to achieve
-2. Discard noise diffs that shouldn't be committed at all
-3. Group all remaining related changes into meaningful, purpose-driven commits
-4. Prefer fewer, cohesive commits over many fragmented ones
+2. Group all related changes into meaningful, purpose-driven commits
+3. Prefer fewer, cohesive commits over many fragmented ones
 
-DO NOT commit file-by-file. DO NOT separate tests from implementation. DO NOT fragment features across multiple commits. DO NOT agonize over how to commit noise — just revert it.
+DO NOT commit file-by-file. DO NOT separate tests from implementation. DO NOT fragment features across multiple commits.
 
-Instead, ask: "What story do these changes tell?" and commit accordingly.
+Ask: "What story do these changes tell?" and commit accordingly.
+
+If a file shouldn't be committed at all (e.g., runtime state, generated artifacts), the right fix is `.gitignore` — not silent revert at commit time.
 
 ## Usage
 
@@ -60,58 +61,6 @@ git status
 git --no-pager diff --stat
 ```
 
-### 1.5. Identify and Discard Noise Diffs (CRITICAL — do this BEFORE grouping commits)
-
-Before grouping commits, identify files whose diffs are **noise** — changes that weren't intentionally made by the developer and shouldn't enter git history. Revert them with `git checkout --` immediately; don't try to decide how to commit them.
-
-**Three categories of noise to detect:**
-
-**(a) Schema-dump tooling version drift** — `db/structure.sql`, `db/schema.rb`, `schema.graphql`, mysqldump/pg_dump output, Prisma `migration.sql`, etc. Signals:
-- Diff contains ONLY meta-comments or header/footer tokens, no actual schema changes
-- `\restrict` / `\unrestrict` tokens (pg_dump 16+ security-restricted session)
-- `-- Dumped from database version X.Y` / `-- Dumped by pg_dump version X.Y` comment drift
-- `-- Name: public; Type: SCHEMA` boilerplate churn
-- mysqldump `-- Server version` line changes
-- No `CREATE TABLE`, `ALTER`, `CREATE INDEX`, `INSERT INTO "schema_migrations"` lines changed
-
-These happen because the developer ran a different version of the dump tool (different pg/mysql version, different client version). They will revert themselves on the next CI dump. Committing them pollutes history and causes endless merge conflicts.
-
-**(b) Whitespace-only / EOF-newline changes** — files where `git diff` shows ONLY:
-- Added/removed trailing newline at end of file
-- Added/removed blank lines with no content change
-- Tab↔space conversion that wasn't intentional
-- CRLF↔LF line ending changes (check `.gitattributes`)
-
-Quick check: `git --no-pager diff --ignore-all-space <file>` — if empty, it's pure whitespace noise.
-
-**(c) IDE auto-format / tooling regeneration** — signals:
-- `package-lock.json` / `yarn.lock` / `Gemfile.lock` changes with no corresponding manifest change (lockfile drift from a different tool version)
-- `.idea/`, `.vscode/settings.json` personal edits that slipped in
-- Sourcemap / build artifact files (`public/assets/`, `dist/`, `build/`) that shouldn't be tracked
-- Auto-formatter reshuffling unrelated lines (e.g., Prettier reflowing a file you only touched 1 line of) — judgment call; keep if intentional
-
-**Action for each noise file:**
-
-```bash
-# Revert the noise file to HEAD
-git checkout -- <file>
-```
-
-**Report to user explicitly** (transparency > silent reversion):
-
-```
-🧹 Noise diffs detected and reverted (not committed):
-  - db/structure.sql       — pg_dump version drift (16.13 vs 16.5 header tokens)
-  - config/app.yml.example — trailing newline only
-  - package-lock.json      — npm version drift (no manifest change)
-
-Real changes to commit: N files
-```
-
-**When in doubt — ask the user, don't revert silently.** If a file looks like a mix (some real changes + some noise), keep it and let the user handle it; never selectively `git checkout -p` hunks without explicit confirmation.
-
-**Why this step matters**: Schema-dump drift is the #1 cause of "why does every PR have 200 lines of unrelated schema changes" — a chronic git-hygiene problem on cross-environment teams (different dev pg versions, CI pg version, prod pg version). Reverting at commit time keeps history clean without forcing everyone to align tool versions.
-
 ### 2. HOLISTIC ANALYSIS - Understand the Overall Purpose
 
 CRITICAL: Before diving into file-by-file analysis, step back and ask:
@@ -124,7 +73,7 @@ Think strategically, not tactically:
 - BAD: "Changed auth.rb, changed user.rb, changed session.rb" -> 3 separate commits
 - GOOD: "These are all part of implementing user authentication" -> 1 commit
 
-Review ALL remaining changes together first (noise already reverted in Step 1.5):
+Review ALL changes together first:
 ```bash
 # Get overview of all changes — ALWAYS use --no-pager (see Commands Used section)
 git --no-pager diff --stat
@@ -284,7 +233,6 @@ git commit -m "<type>: <description>"
 After all commits, show:
 - Total number of commits created
 - Each commit hash + message
-- Noise diffs that were reverted (if any, from Step 1.5)
 - Suggest next steps (e.g., git push)
 
 ## Commands Used
@@ -310,7 +258,7 @@ git --no-pager diff --stat
 git --no-pager diff <file>
 git --no-pager diff --ignore-all-space <file>  # detect whitespace-only noise
 
-# Revert noise files (Step 1.5)
+# Revert a file to HEAD (only when explicitly instructed by user)
 git checkout -- <file>
 
 # Stage files
@@ -330,12 +278,12 @@ git --no-pager show <hash>
 
 ## Workflow Example
 
-BAD Example (Over-splitting + committing noise):
+BAD Example (Over-splitting):
 ```
 User: /commit
 
 AI (WRONG APPROACH):
-Found 7 modified files
+Found 5 modified files
 
 Proposed commits:
   Commit 1: feat: add user model
@@ -348,41 +296,31 @@ Proposed commits:
     - spec/auth_spec.rb
   Commit 5: chore: update dependencies
     - Gemfile
-  Commit 6: chore: update schema dump
-    - db/structure.sql         # ← NOISE, pg_dump version drift
-  Commit 7: style: fix trailing newline
-    - config/app.yml.example   # ← NOISE, whitespace only
 
-Problems: Tests separated from code; noise committed as real history.
+Problems: Tests separated from code. 5 commits for what should be 3.
 ```
 
-GOOD Example (Holistic grouping + noise reverted):
+GOOD Example (Holistic grouping):
 ```
 User: /commit
 
 AI (CORRECT APPROACH):
 1. Analyzing all changes...
-   Found 7 modified files
+   Found 5 modified files
 
-2. Scanning for noise diffs (Step 1.5)...
-   🧹 Noise detected and reverted:
-     - db/structure.sql       — pg_dump 16.13 → 16.5 header drift only
-     - config/app.yml.example — trailing newline only
-   Remaining real changes: 5 files
-
-3. Identifying overall purpose...
+2. Identifying overall purpose...
    Main goal: Implementing user registration feature
    Secondary: Fixing existing auth bug
    Maintenance: Dependency updates
 
-4. Holistic analysis:
+3. Holistic analysis:
    - lib/user.rb: New user registration feature
    - spec/user_spec.rb: Tests for user registration (same feature)
    - lib/auth.rb: Fix password validation bug (separate concern)
    - spec/auth_spec.rb: Tests for auth fix (same bug fix)
    - Gemfile: Updated dependencies (separate maintenance)
 
-5. Proposed commits (grouped by purpose):
+4. Proposed commits (grouped by purpose):
    Commit 1: feat: add user registration
      - lib/user.rb (implementation)
      - spec/user_spec.rb (tests)
@@ -397,7 +335,7 @@ Commit 1 created (a1b2c3d): feat: add user registration
 Commit 2 created (e4f5g6h): fix: correct password validation logic
 Commit 3 created (i7j8k9l): chore: update gem dependencies
 
-Summary: 3 meaningful commits (2 noise files reverted, not committed)
+Summary: 3 meaningful commits
 Next steps: Review with 'git log' or push with 'git push'
 ```
 
@@ -431,32 +369,20 @@ Next steps: Review with 'git log' or push with 'git push'
 - **Independent concerns**: changes that could be deployed separately
 - **Too broad scope**: if one commit does too many unrelated things
 
-### When to REVERT Rather Than Commit (Noise Diffs — Step 1.5)
-- Schema dump version drift (pg_dump/mysqldump header/meta comments only)
-- Whitespace-only diffs (verify with `git diff --ignore-all-space`)
-- Lockfile drift with no manifest change
-- IDE personal settings accidentally staged
-- Build artifacts that shouldn't be tracked
-
 ### Anti-Patterns to Avoid
 - NEVER split implementation and tests into separate commits
 - NEVER create one commit per file unless files are truly independent
 - NEVER split configuration from the code that requires it
 - NEVER fragment a feature into multiple commits just because it touches multiple files
-- NEVER commit pg_dump/mysqldump version-drift diffs as if they were real changes
-- NEVER silently revert files without reporting to the user
+- NEVER silently revert files without explicit user instruction — if a file shouldn't be tracked, add it to `.gitignore`
 
 ### Decision Framework
 ```
 For each changed file, ask in order:
-1. "Is this noise (schema dump drift / whitespace only / lockfile drift)?"
-   └─ YES → git checkout --, report to user, move on
-   └─ NO  → continue
-
-2. "What was the developer trying to accomplish?" (identify the purpose)
-3. "Do these files work together toward that purpose?" (YES → combine)
-4. "Would splitting these make the history harder to understand?" (YES → combine)
-5. "Could these changes be deployed independently?" (NO → combine)
+1. "What was the developer trying to accomplish?" (identify the purpose)
+2. "Do these files work together toward that purpose?" (YES → combine)
+3. "Would splitting these make the history harder to understand?" (YES → combine)
+4. "Could these changes be deployed independently?" (NO → combine)
 ```
 
 ## Error Handling
@@ -503,7 +429,7 @@ This skill works best:
 ## Version History
 
 - Created: 2025-02-01
-- Updated: 2026-04-29 — Added Step 1.5 (noise diff detection & revert) based on real incident: pg_dump 16.x version drift and trailing-newline diffs polluting commits during IdleSwap project work
 - Updated: 2026-04-29 — Mandated `git --no-pager` for `diff`/`log`/`show`/`blame` after Goomart incident where the default `less` pager hung the agent terminal in `waiting` state, wasting 2 tool calls per skill run
+- Updated: 2026-05-18 — Removed Step 1.5 (noise diff auto-revert). Rationale: silently reverting files at commit time is wrong — it can mask legitimate changes (e.g., db/validator_statuses.json is the authoritative source per ADR-017, not noise). If a file shouldn't be tracked, the correct fix is `.gitignore`, not commit-time reversion.
 - Purpose: Improve commit quality and development workflow
 - Compatible with: Any git repository
