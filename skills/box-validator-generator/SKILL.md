@@ -750,6 +750,176 @@ self.task_id = SecureRandom.uuid
 
 `SecureRandom.uuid` 只能在 shell/console 里**一次性**生成 UUID，然后把结果**硬编码**进去。绝不能把 `SecureRandom.uuid` 直接赋值给 `self.task_id`，那样每次 Rails 加载类时 UUID 都会变，导致任务 ID 飘移、无法复现和追踪。
 
+## 📸 task_images — 题目图片（ADR-020）
+
+### 什么时候需要 task_images
+
+题目要求 Agent **上传图片**时，必须提供配套图片。典型场景：
+
+- 发布闲置帖（发闲置 → 上传商品照片）
+- 发布社区帖子（带图文）
+- 任何页面有「上传图片」「添加图片」「选择照片」按钮的场景
+
+**不需要 task_images 的场景**：纯文字操作（下单、加购、修改地址、发评论等）。
+
+---
+
+### 机制全貌
+
+```
+APK 启动任务
+  └─ GET /api/tasks/:task_id/images.json
+       ← { base_path: "/task_images/post/v001_post_validator",
+            images: [{ path: ".../airpods_01.jpg", label: "..." }, ...] }
+  └─ 按 path 逐张 HTTP 下载图片到本地
+  └─ Agent 执行任务时，直接从本地选这些图上传
+
+Rails 静态文件托管：
+  public/task_images/{module}/{v_dir}/{filename}
+  e.g. public/task_images/post/v001_post_validator/airpods_01.jpg
+```
+
+---
+
+### Validator 里怎么声明
+
+在 `self.timeout_seconds` 下面紧接着声明：
+
+```ruby
+self.task_images = [
+  { 'filename' => 'product_01.jpg', 'label' => '商品正面图' },
+  { 'filename' => 'product_02.jpg', 'label' => '商品细节图' }
+]
+```
+
+- `filename`：**字符串 key（单引号），不是 symbol**，必须与 `public/task_images/` 下文件名严格一致（含大小写）
+- `label`：图片说明，供 APK UI 和日志展示用，中文即可
+- 通常 2 张图（01 主图 + 02 辅图），太多无意义
+
+---
+
+### 图片目录规则
+
+| 概念 | 格式 | 示例 |
+|---|---|---|
+| validator_id | `{module}/v{NNN}_{brief}_validator` | `post/v001_post_validator` |
+| 图片目录 | `public/task_images/{module}/{v_dir}/` | `public/task_images/post/v001_post_validator/` |
+| v_dir | validator_id 斜杠后面的部分 | `v001_post_validator` |
+| 文件名 | `{商品关键词}_{序号}.jpg` | `airpods_01.jpg` |
+
+---
+
+### Step 3.5：下载并放置题目图片（生成 validator 时必做）
+
+**只要 task_images 不为空，生成文件前必须完成这一步。**
+
+#### 1. 确定图片内容
+
+根据题目商品关键词，用 **Google Images / Unsplash / Pexels** 找 2 张真实商品图：
+- 优先找**白底商品图**（更像闲置平台的商品照）
+- 图片需能体现题目描述的商品（如"AirPods Pro 2 USB-C"要能看到 USB-C 充电盒）
+- 分辨率 800×800 以上，< 500KB 为佳
+
+#### 2. 用 curl 直接下载到正确目录
+
+```bash
+# 先建目录（validator 子目录以 v_dir 命名）
+mkdir -p public/task_images/post/v{NNN}_{brief}_validator/
+
+# 下载图片（替换 URL 为真实图片 URL）
+curl -L "https://example.com/product.jpg" \
+     -o public/task_images/post/v{NNN}_{brief}_validator/product_01.jpg
+
+curl -L "https://example.com/product2.jpg" \
+     -o public/task_images/post/v{NNN}_{brief}_validator/product_02.jpg
+```
+
+#### 3. 用 web_search 找图片
+
+搜索关键词格式：`{商品名} product photo white background site:unsplash.com` 或 `{商品名} 商品图 高清`
+
+找到合适图片后，右键复制图片地址（.jpg/.png），再 curl 下载。
+
+推荐搜索词示例：
+- `AirPods Pro 2 USB-C product photo` → Unsplash / Apple 官网
+- `iPad Air M1 purple product shot`
+- `哑铃 20kg 商品图` → 淘宝/京东商品图（通常白底）
+
+#### 4. 验证文件存在
+
+```bash
+ls -lh public/task_images/post/v{NNN}_{brief}_validator/
+# 应看到 2 个 .jpg 文件
+```
+
+---
+
+### task 描述里是否要提"上传图片"
+
+**通常要提，但语气要自然**（像用户在说话）：
+
+```ruby
+# ✅ 好 — 自然提到图片
+task: '以张三的身份，通过「发闲置」功能发布一个帖子。' \
+      '在描述框输入以「自用 AirPods Pro 2 USB-C 降噪耳机 95新」开头的内容，' \
+      '上传准备好的耳机图片（2张），价格 899 元，分类「智能设备」，包邮，点击发布。'
+
+# ❌ 坏 — 暴露系统实现细节
+task: '上传 task_images 里的图片到帖子'
+task: '从 /task_images/post/v001/ 目录读取图片'
+```
+
+**说「准备好的图片」「已有的图片」即可**，Agent 会从本地找到 APK 预下载好的图。
+
+---
+
+### 反模式
+
+```ruby
+# ❌ 反例 N：filename 用 symbol key
+self.task_images = [
+  { filename: 'airpods_01.jpg', label: 'AirPods 图' }  # ❌ symbol key
+]
+# ✅ 正确：必须用字符串 key
+self.task_images = [
+  { 'filename' => 'airpods_01.jpg', 'label' => 'AirPods 图' }
+]
+
+# ❌ 反例 O：filename 与实际文件名大小写不匹配
+self.task_images = [{ 'filename' => 'AirPods_01.jpg', ... }]
+# 实际文件：airpods_01.jpg  → APK 下载 404
+
+# ❌ 反例 P：图片目录建错位置
+# 放到了 public/task_images/v001_post_validator/  ← 漏了 module 子目录
+# ✅ 正确：public/task_images/post/v001_post_validator/
+
+# ❌ 反例 Q：声明了 task_images 但没有下载实际图片
+# → APK 拉清单成功，但 HTTP 请求图片时 404，Agent 无图可上传
+```
+
+---
+
+### 完整示例（IdleSwap 发帖题目）
+
+```ruby
+self.validator_id    = 'post/v001_post_validator'
+self.task_id         = 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+self.title           = '以张三身份发布二手 AirPods Pro 2 帖子：描述以「自用 AirPods Pro 2 USB-C 降噪耳机 95新」开头，价格 899 元，分类「智能设备」，包邮'
+self.timeout_seconds = 180
+
+self.task_images = [
+  { 'filename' => 'airpods_01.jpg', 'label' => 'AirPods Pro 2 充电盒外观' },
+  { 'filename' => 'airpods_02.jpg', 'label' => 'AirPods Pro 2 耳机本体' }
+]
+```
+
+对应图片文件：
+```
+public/task_images/post/v001_post_validator/
+  ├── airpods_01.jpg   ← 充电盒外观图（白底）
+  └── airpods_02.jpg   ← 耳机本体图（使用场景）
+```
+
 ## 反模式速查（见到就停手）
 
 ```ruby
@@ -836,6 +1006,21 @@ self.task_id = SecureRandom.uuid   # ❌ 每次 Rails 加载这个类，task_id 
 # ✅ 正确：二选一
 self.task_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'  # 方案 A：一次性生成后硬编码
 # 或者直接省略这行                                        # 方案 B：留空，BaseValidator 处理 nil
+
+# ❌ 反例 N：task_images filename 用 symbol key（APK 反序列化后取不到值）
+self.task_images = [{ filename: 'airpods_01.jpg', label: 'AirPods 图' }]
+# ✅ 正确：必须用字符串 key
+self.task_images = [{ 'filename' => 'airpods_01.jpg', 'label' => 'AirPods 图' }]
+
+# ❌ 反例 O：声明了 task_images 但没有下载实际图片到 public/task_images/
+# → APK 拉清单成功，HTTP 请求图片时 404，Agent 无图可上传
+# ✅ 正确：生成 validator 的同时，必须把图片 curl 下载到对应目录
+# public/task_images/{module}/{v_dir}/{filename}
+
+# ❌ 反例 P：图片目录层级错误（漏了 module 子目录）
+# public/task_images/v001_post_validator/airpods_01.jpg  ← ❌ 漏了 post/
+# ✅ 正确：
+# public/task_images/post/v001_post_validator/airpods_01.jpg
 ```
 
 ## 会话结束 Checklist
@@ -843,6 +1028,7 @@ self.task_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'  # 方案 A：一次性生
 生成完后，按照 [CLAUDE.md 的 Session-End Checklist](../../../CLAUDE.md#-session-end-checklist-agent-必读)：
 
 - [ ] `rake validator:lint` 通过
+- [ ] 如果声明了 `task_images`，确认图片已下载到 `public/task_images/{module}/{v_dir}/`，文件名与 `filename` 字段严格对应
 - [ ] 如果引入新约定（例如新的 assertion 模式），考虑更新 `validator-writing.md` 或开 ADR
 - [ ] 生成的 validator 实际试跑一次 `execute_simulate` 应返回 `passed`
 
