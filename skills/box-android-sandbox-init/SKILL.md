@@ -1,5 +1,5 @@
 ---
-name: sengclaw-android-sandbox-init
+name: box-android-sandbox-init
 description: >
   Android Sandbox 项目环境一键初始化。从 git clone 到 AVD 跑通 smoke test 的完整引导。
   处理：仓库拉取、大文件解压（apks.zip/images.zip 从飞书下载）、.env 配置、
@@ -10,7 +10,7 @@ disable-model-invocation: false
 user-invocable: true
 ---
 
-# sengclaw-android-sandbox-init
+# box-android-sandbox-init
 
 把新人从 0 → 跑通第一道 Pass@1 的全链路自动化。
 
